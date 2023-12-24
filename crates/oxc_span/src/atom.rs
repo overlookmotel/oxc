@@ -110,3 +110,9 @@ impl fmt::Display for Atom {
         fmt::Display::fmt(self.0.as_str(), f)
     }
 }
+
+impl Drop for Atom {
+    fn drop(&mut self) {
+        println!("Dropping Atom: {}", self);
+    }
+}

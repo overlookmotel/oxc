@@ -82,6 +82,7 @@ oxc_type_synthesis = { path = "crates/oxc_type_synthesis" }
 oxc_query          = { path = "crates/oxc_query" }
 oxc_linter_plugin  = { path = "crates/oxc_linter_plugin" }
 oxc_prettier       = { path = "crates/oxc_prettier" }
+test_leak          = { path = "crates/test_leak" }
 
 oxc_tasks_common = { path = "tasks/common" }
 oxc_vscode       = { path = "editors/vscode/server" }
