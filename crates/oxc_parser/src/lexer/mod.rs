@@ -435,6 +435,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn irregular_whitespace_handler(&mut self) -> Kind {
+        self.trivia_builder.add_irregular_whitespace(self.current.token.start, self.offset());
+        self.consume_char();
+        Kind::WhiteSpace
+    }
+
     /// Section 12.4 Single Line Comment
     #[allow(clippy::cast_possible_truncation)]
     fn skip_single_line_comment(&mut self) -> Kind {
@@ -1326,9 +1332,9 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
+    UNI, UNI, UC2, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
+    UNI, UE1, UE2, UE3, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UEF, // E
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
 ];
 
@@ -1859,6 +1865,36 @@ const L_Y: ByteHandler = |lexer| match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 };
 
-// Non-ASCII characters
+// c2 byte - start of 2-byte unicode sequence, which can be irregular whitespace
+const UC2: ByteHandler = |lexer| {
+    let s = lexer.current.chars.as_str().as_bytes();
+    // SAFETY: `c2` byte in UTF-8 is always start of a 2-byte sequence
+    unsafe { assert_unchecked!(s.len() >= 2) };
+    let byte2 = s[1];
+
+    // Handle irregular whitespace
+    // U+00A0 NON-BREAKING SPACE
+    const NBSP_BYTE2: u8 = to_byte2("\u{a0}");
+    // U+0085
+    const U85_BYTE2: u8 = to_byte2("\u{85}");
+    const fn to_byte2(c: &str) -> u8 {
+        assert!(c.as_bytes().len() == 2);
+        assert!(c.as_bytes()[0] == 0xc2);
+        c.as_bytes()[1]
+    }
+    if byte2 == NBSP_BYTE2 || byte2 == U85_BYTE2 {
+        return lexer.irregular_whitespace_handler();
+    }
+
+    // Handle unicode identifier
+    lexer.unicode_char_handler()
+};
+
+const UE1: ByteHandler = |lexer| lexer.unicode_char_handler();
+const UE2: ByteHandler = |lexer| lexer.unicode_char_handler();
+const UE3: ByteHandler = |lexer| lexer.unicode_char_handler();
+const UEF: ByteHandler = |lexer| lexer.unicode_char_handler();
+
+// Other non-ASCII bytes, which cannot be irregular whitespace or line breaks
 #[allow(clippy::redundant_closure_for_method_calls)]
 const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
