@@ -502,7 +502,8 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             if !is_identifier_part(c) {
                 if c == '\\' {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is `\`
+                    unsafe { self.consume_ascii_char() };
                     builder.force_allocation_without_current_ascii_char(self);
                     self.identifier_unicode_escape_sequence(&mut builder, false);
                     continue;
@@ -531,8 +532,11 @@ impl<'a> Lexer<'a> {
     /// Section 12.8 Punctuators
     fn read_dot(&mut self) -> Kind {
         if self.peek() == Some('.') && self.peek2() == Some('.') {
-            self.current.chars.next();
-            self.current.chars.next();
+            // SAFETY: We just established next 2 chars are both `.`
+            unsafe {
+                self.consume_ascii_char();
+                self.consume_ascii_char();
+            }
             return Kind::Dot3;
         }
         if self.peek().is_some_and(|c| c.is_ascii_digit()) {
@@ -637,15 +641,18 @@ impl<'a> Lexer<'a> {
             Some('o' | 'O') => self.read_non_decimal(Kind::Octal),
             Some('x' | 'X') => self.read_non_decimal(Kind::Hex),
             Some('e' | 'E') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `e` or `E`
+                unsafe { self.consume_ascii_char() };
                 self.read_decimal_exponent()
             }
             Some('.') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `.`
+                unsafe { self.consume_ascii_char() };
                 self.decimal_literal_after_decimal_point_after_digits()
             }
             Some('n') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `n`
+                unsafe { self.consume_ascii_char() };
                 self.check_after_numeric_literal(Kind::Decimal)
             }
             Some(n) if n.is_ascii_digit() => self.read_legacy_octal(),
@@ -666,7 +673,8 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             match c {
                 '_' => {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is `_`
+                    unsafe { self.consume_ascii_char() };
                     if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
                         self.current.chars.next();
                     } else {
@@ -681,7 +689,8 @@ impl<'a> Lexer<'a> {
             }
         }
         if self.peek() == Some('n') {
-            self.current.chars.next();
+            // SAFETY: We just established next char is `n`
+            unsafe { self.consume_ascii_char() };
         }
         self.check_after_numeric_literal(kind)
     }
@@ -691,10 +700,12 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 Some('0'..='7') => {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is an ASCII digit
+                    unsafe { self.consume_ascii_char() };
                 }
                 Some('8'..='9') => {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is as ASCII digit
+                    unsafe { self.consume_ascii_char() };
                     kind = Kind::Decimal;
                 }
                 _ => break,
@@ -704,12 +715,14 @@ impl<'a> Lexer<'a> {
         match self.peek() {
             // allow 08.5 and 09.5
             Some('.') if kind == Kind::Decimal => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `.`
+                unsafe { self.consume_ascii_char() };
                 self.decimal_literal_after_decimal_point_after_digits()
             }
             // allow 08e1 and 09e1
             Some('e') if kind == Kind::Decimal => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `e`
+                unsafe { self.consume_ascii_char() };
                 self.read_decimal_exponent()
             }
             _ => self.check_after_numeric_literal(kind),
@@ -731,11 +744,13 @@ impl<'a> Lexer<'a> {
     fn read_decimal_exponent(&mut self) -> Kind {
         let kind = match self.peek() {
             Some('-') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `-`
+                unsafe { self.consume_ascii_char() };
                 Kind::NegativeExponential
             }
             Some('+') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `+`
+                unsafe { self.consume_ascii_char() };
                 Kind::PositiveExponential
             }
             _ => Kind::PositiveExponential,
@@ -746,7 +761,8 @@ impl<'a> Lexer<'a> {
 
     fn read_decimal_digits(&mut self) {
         if self.peek().is_some_and(|c| c.is_ascii_digit()) {
-            self.current.chars.next();
+            // SAFETY: We just established next char is an ASCII digit
+            unsafe { self.consume_ascii_char() };
         } else {
             self.unexpected_err();
             return;
@@ -759,16 +775,19 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             match c {
                 '_' => {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is `_`
+                    unsafe { self.consume_ascii_char() };
                     if self.peek().is_some_and(|c| c.is_ascii_digit()) {
-                        self.current.chars.next();
+                        // SAFETY: We just established next char is an ASCII digit
+                        unsafe { self.consume_ascii_char() };
                     } else {
                         self.unexpected_err();
                         return;
                     }
                 }
                 '0'..='9' => {
-                    self.current.chars.next();
+                    // SAFETY: We just established next char is an ASCII digit
+                    unsafe { self.consume_ascii_char() };
                 }
                 _ => break,
             }
@@ -789,7 +808,8 @@ impl<'a> Lexer<'a> {
 
     fn optional_decimal_digits(&mut self) {
         if self.peek().is_some_and(|c| c.is_ascii_digit()) {
-            self.current.chars.next();
+            // SAFETY: We just established next char is an ASCII digit
+            unsafe { self.consume_ascii_char() };
         } else {
             return;
         }
@@ -798,7 +818,8 @@ impl<'a> Lexer<'a> {
 
     fn optional_exponent(&mut self) -> Option<Kind> {
         if matches!(self.peek(), Some('e' | 'E')) {
-            self.current.chars.next();
+            // SAFETY: We just established next char is `e` or `E`
+            unsafe { self.consume_ascii_char() };
             return Some(self.read_decimal_exponent());
         }
         None
@@ -892,7 +913,8 @@ impl<'a> Lexer<'a> {
         let mut flags = RegExpFlags::empty();
 
         while let Some(ch @ ('$' | '_' | 'a'..='z' | 'A'..='Z' | '0'..='9')) = self.peek() {
-            self.current.chars.next();
+            // SAFETY: We just established next char is an ASCII character
+            unsafe { self.consume_ascii_char() };
             let flag = if let Ok(flag) = RegExpFlags::try_from(ch) {
                 flag
             } else {
@@ -980,11 +1002,13 @@ impl<'a> Lexer<'a> {
     fn read_jsx_child(&mut self) -> Kind {
         match self.peek() {
             Some('<') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `<`
+                unsafe { self.consume_ascii_char() };
                 Kind::LAngle
             }
             Some('{') => {
-                self.current.chars.next();
+                // SAFETY: We just established next char is `{`
+                unsafe { self.consume_ascii_char() };
                 Kind::LCurly
             }
             Some(c) => {
@@ -1166,7 +1190,8 @@ impl<'a> Lexer<'a> {
             Some(c @ 'A'..='F') => 10 + (c as u32 - 'A' as u32),
             _ => return None,
         };
-        self.current.chars.next();
+        // SAFETY: We just established next char is `0..=9`, `a..=f` or `A..=F`
+        unsafe { self.consume_ascii_char() };
         Some(value)
     }
 
@@ -1276,16 +1301,19 @@ impl<'a> Lexer<'a> {
                     match a {
                         '4'..='7' => {
                             if matches!(self.peek(), Some('0'..='7')) {
-                                let b = self.consume_char();
+                                // SAFETY: We just established next char is an ASCII digit
+                                let b = unsafe { self.consume_ascii_char() };
                                 num.push(b);
                             }
                         }
                         '0'..='3' => {
                             if matches!(self.peek(), Some('0'..='7')) {
-                                let b = self.consume_char();
+                                // SAFETY: We just established next char is an ASCII digit
+                                let b = unsafe { self.consume_ascii_char() };
                                 num.push(b);
                                 if matches!(self.peek(), Some('0'..='7')) {
-                                    let c = self.consume_char();
+                                    // SAFETY: We just established next char is an ASCII digit
+                                    let c = unsafe { self.consume_ascii_char() };
                                     num.push(c);
                                 }
                             }
@@ -1508,11 +1536,13 @@ const SLH: ByteHandler = |lexer| {
     unsafe { lexer.consume_ascii_char() };
     match lexer.peek() {
         Some('/') => {
-            lexer.current.chars.next();
+            // SAFETY: We just established next char is `/`
+            unsafe { lexer.consume_ascii_char() };
             lexer.skip_single_line_comment()
         }
         Some('*') => {
-            lexer.current.chars.next();
+            // SAFETY: We just established next char is `*`
+            unsafe { lexer.consume_ascii_char() };
             lexer.skip_multi_line_comment()
         }
         _ => {
@@ -1601,7 +1631,8 @@ const QST: ByteHandler = |lexer| {
         if lexer.peek2().is_some_and(|c| c.is_ascii_digit()) {
             Kind::Question
         } else {
-            lexer.current.chars.next();
+            // SAFETY: We just established next char is `.`
+            unsafe { lexer.consume_ascii_char() };
             Kind::QuestionDot
         }
     } else {
