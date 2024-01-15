@@ -296,14 +296,29 @@ impl<'a> Lexer<'a> {
         chars.next()
     }
 
-    /// Peek the next character, and advance the current position if it matches
+    /// Peek the next character, and advance the current position if it matches.
+    /// `c` must be an ASCII character.
     #[inline]
     fn next_eq(&mut self, c: char) -> bool {
-        let matched = self.peek() == Some(c);
-        if matched {
-            self.current.chars.next();
+        // NB: This assertion is compiled out when this function is inlined
+        assert!((c as u32) < 128, "next_eq must be called with an ASCII character");
+        let c = c as u8;
+
+        let s = self.current.chars.as_str();
+        if s.is_empty() {
+            return false;
         }
-        matched
+
+        let byte = s.as_bytes()[0];
+        if byte != c {
+            return false;
+        }
+
+        // SAFETY:
+        // `s.is_empty()` check above ensures not at EOF.
+        // Assertion above ensures `c` is ASCII, and next char matches it, so next char is ASCII.
+        unsafe { self.consume_ascii_char() };
+        true
     }
 
     fn current_offset(&self) -> Span {
