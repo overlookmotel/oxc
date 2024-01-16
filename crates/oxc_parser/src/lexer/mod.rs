@@ -270,6 +270,24 @@ impl<'a> Lexer<'a> {
         self.current.chars.next().unwrap()
     }
 
+    /// Consume the current char when it's known to be ASCII.
+    /// This compiles down to a single instruction, just incrementing `chars` iterator's pointer.
+    /// NOTE: Caller must ensure not at EOF and current char is ASCII.
+    #[inline]
+    fn consume_ascii_char(&mut self) -> char {
+        let s = self.current.chars.as_str();
+        // SAFETY: Caller must ensure not at EOF and current char is ASCII.
+        unsafe {
+            if s.is_empty() {
+                std::hint::unreachable_unchecked()
+            };
+            if s.as_bytes()[0] >= 128 {
+                std::hint::unreachable_unchecked()
+            };
+        }
+        self.current.chars.next().unwrap()
+    }
+
     /// Peek the next char without advancing the position
     #[inline]
     fn peek(&self) -> Option<char> {
@@ -1428,27 +1446,27 @@ type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 
 // `\0` `\1` etc
 const ERR: ByteHandler = |lexer| {
-    let c = lexer.consume_char();
+    let c = lexer.consume_ascii_char();
     lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
     Kind::Undetermined
 };
 
 // <SPACE> <TAB> <VT> <FF>
 const SPS: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::WhiteSpace
 };
 
 // '\r' '\n'
 const LIN: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.current.token.is_on_new_line = true;
     Kind::NewLine
 };
 
 // !
 const EXL: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
             Kind::Neq2
@@ -1462,7 +1480,7 @@ const EXL: ByteHandler = |lexer| {
 
 // ' "
 const QOT: ByteHandler = |lexer| {
-    let c = lexer.consume_char();
+    let c = lexer.consume_ascii_char();
     if lexer.context == LexerContext::JsxAttributeValue {
         lexer.read_jsx_string_literal(c)
     } else {
@@ -1472,7 +1490,7 @@ const QOT: ByteHandler = |lexer| {
 
 // #
 const HAS: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     // HashbangComment ::
     //     `#!` SingleLineCommentChars?
     if lexer.current.token.start == 0 && lexer.next_eq('!') {
@@ -1489,7 +1507,7 @@ const IDT: ByteHandler = |lexer| {
 
 // %
 const PRC: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('=') {
         Kind::PercentEq
     } else {
@@ -1499,7 +1517,7 @@ const PRC: ByteHandler = |lexer| {
 
 // &
 const AMP: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('&') {
         if lexer.next_eq('=') {
             Kind::Amp2Eq
@@ -1515,19 +1533,19 @@ const AMP: ByteHandler = |lexer| {
 
 // (
 const PNO: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::LParen
 };
 
 // )
 const PNC: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::RParen
 };
 
 // *
 const ATR: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('*') {
         if lexer.next_eq('=') {
             Kind::Star2Eq
@@ -1543,7 +1561,7 @@ const ATR: ByteHandler = |lexer| {
 
 // +
 const PLS: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('+') {
         Kind::Plus2
     } else if lexer.next_eq('=') {
@@ -1555,25 +1573,25 @@ const PLS: ByteHandler = |lexer| {
 
 // ,
 const COM: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::Comma
 };
 
 // -
 const MIN: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.read_minus().unwrap_or_else(|| lexer.skip_single_line_comment())
 };
 
 // .
 const PRD: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.read_dot()
 };
 
 // /
 const SLH: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     match lexer.peek() {
         Some('/') => {
             lexer.current.chars.next();
@@ -1596,37 +1614,37 @@ const SLH: ByteHandler = |lexer| {
 
 // 0
 const ZER: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.read_zero()
 };
 
 // 1 to 9
 const DIG: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.decimal_literal_after_first_digit()
 };
 
 // :
 const COL: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::Colon
 };
 
 // ;
 const SEM: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::Semicolon
 };
 
 // <
 const LSS: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.read_left_angle().unwrap_or_else(|| lexer.skip_single_line_comment())
 };
 
 // =
 const EQL: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
             Kind::Eq3
@@ -1642,14 +1660,14 @@ const EQL: ByteHandler = |lexer| {
 
 // >
 const GTR: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     // `>=` is re-lexed with [Lexer::next_jsx_child]
     Kind::RAngle
 };
 
 // ?
 const QST: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('?') {
         if lexer.next_eq('=') {
             Kind::Question2Eq
@@ -1671,20 +1689,20 @@ const QST: ByteHandler = |lexer| {
 
 // @
 const AT_: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::At
 };
 
 // [
 const BTO: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::LBrack
 };
 
 // \
 const ESC: ByteHandler = |lexer| {
     let mut builder = AutoCow::new(lexer);
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     builder.force_allocation_without_current_ascii_char(lexer);
     lexer.identifier_unicode_escape_sequence(&mut builder, true);
     let text = lexer.identifier_name(builder);
@@ -1693,13 +1711,13 @@ const ESC: ByteHandler = |lexer| {
 
 // ]
 const BTC: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::RBrack
 };
 
 // ^
 const CRT: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('=') {
         Kind::CaretEq
     } else {
@@ -1709,19 +1727,19 @@ const CRT: ByteHandler = |lexer| {
 
 // `
 const TPL: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     lexer.read_template_literal(Kind::TemplateHead, Kind::NoSubstitutionTemplate)
 };
 
 // {
 const BEO: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::LCurly
 };
 
 // |
 const PIP: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     if lexer.next_eq('|') {
         if lexer.next_eq('=') {
             Kind::Pipe2Eq
@@ -1737,13 +1755,13 @@ const PIP: ByteHandler = |lexer| {
 
 // }
 const BEC: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::RCurly
 };
 
 // ~
 const TLD: ByteHandler = |lexer| {
-    lexer.consume_char();
+    lexer.consume_ascii_char();
     Kind::Tilde
 };
 
