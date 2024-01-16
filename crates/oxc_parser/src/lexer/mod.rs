@@ -11,7 +11,6 @@ mod string_builder;
 mod token;
 mod trivia_builder;
 
-use assert_unchecked::assert_unchecked;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
@@ -271,20 +270,6 @@ impl<'a> Lexer<'a> {
         self.current.chars.next().unwrap()
     }
 
-    /// Consume the current char when it's known to be ASCII.
-    /// This compiles down to a single instruction, just incrementing `chars` iterator's pointer.
-    /// NOTE: Caller must ensure not at EOF and current char is ASCII.
-    #[inline]
-    fn consume_ascii_char(&mut self) -> char {
-        let s = self.current.chars.as_str();
-        // SAFETY: Caller must ensure not at EOF and current char is ASCII.
-        unsafe {
-            assert_unchecked!(!s.is_empty());
-            assert_unchecked!(s.as_bytes()[0] < 128);
-        }
-        self.current.chars.next().unwrap()
-    }
-
     /// Peek the next char without advancing the position
     #[inline]
     fn peek(&self) -> Option<char> {
@@ -395,7 +380,7 @@ impl<'a> Lexer<'a> {
             }
 
             let byte = remaining.as_bytes()[0];
-            let kind = BYTE_HANDLERS[byte as usize](self);
+            let kind = handle_byte(byte, self);
 
             if !matches!(
                 kind,
@@ -1307,58 +1292,167 @@ enum SurrogatePair {
     HighLow(u32, u32),
 }
 
-type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
+#[inline]
+fn handle_byte(byte: u8, lexer: &mut Lexer) -> Kind {
+    #[allow(clippy::match_same_arms)]
+    match byte {
+        0 => ERR(lexer),
+        1 => ERR(lexer),
+        2 => ERR(lexer),
+        3 => ERR(lexer),
+        4 => ERR(lexer),
+        5 => ERR(lexer),
+        6 => ERR(lexer),
+        7 => ERR(lexer),
+        8 => ERR(lexer),
+        b'\t' => SPS(lexer),
+        b'\n' => LIN(lexer),
+        11 => SPS(lexer),
+        12 => SPS(lexer),
+        b'\r' => LIN(lexer),
+        14 => ERR(lexer),
+        15 => ERR(lexer),
+        16 => ERR(lexer),
+        17 => ERR(lexer),
+        18 => ERR(lexer),
+        19 => ERR(lexer),
+        20 => ERR(lexer),
+        21 => ERR(lexer),
+        22 => ERR(lexer),
+        23 => ERR(lexer),
+        24 => ERR(lexer),
+        25 => ERR(lexer),
+        26 => ERR(lexer),
+        27 => ERR(lexer),
+        28 => ERR(lexer),
+        29 => ERR(lexer),
+        30 => ERR(lexer),
+        31 => ERR(lexer),
+        b' ' => SPS(lexer),
+        b'!' => EXL(lexer),
+        b'"' => QOT(lexer),
+        b'#' => HAS(lexer),
+        b'$' => IDT(lexer),
+        b'%' => PRC(lexer),
+        b'&' => AMP(lexer),
+        b'\'' => QOT(lexer),
+        b'(' => PNO(lexer),
+        b')' => PNC(lexer),
+        b'*' => ATR(lexer),
+        b'+' => PLS(lexer),
+        b',' => COM(lexer),
+        b'-' => MIN(lexer),
+        b'.' => PRD(lexer),
+        b'/' => SLH(lexer),
+        b'0' => ZER(lexer),
+        b'1' => DIG(lexer),
+        b'2' => DIG(lexer),
+        b'3' => DIG(lexer),
+        b'4' => DIG(lexer),
+        b'5' => DIG(lexer),
+        b'6' => DIG(lexer),
+        b'7' => DIG(lexer),
+        b'8' => DIG(lexer),
+        b'9' => DIG(lexer),
+        b':' => COL(lexer),
+        b';' => SEM(lexer),
+        b'<' => LSS(lexer),
+        b'=' => EQL(lexer),
+        b'>' => GTR(lexer),
+        b'?' => QST(lexer),
+        b'@' => AT_(lexer),
+        b'A' => IDT(lexer),
+        b'B' => IDT(lexer),
+        b'C' => IDT(lexer),
+        b'D' => IDT(lexer),
+        b'E' => IDT(lexer),
+        b'F' => IDT(lexer),
+        b'G' => IDT(lexer),
+        b'H' => IDT(lexer),
+        b'I' => IDT(lexer),
+        b'J' => IDT(lexer),
+        b'K' => IDT(lexer),
+        b'L' => IDT(lexer),
+        b'M' => IDT(lexer),
+        b'N' => IDT(lexer),
+        b'O' => IDT(lexer),
+        b'P' => IDT(lexer),
+        b'Q' => IDT(lexer),
+        b'R' => IDT(lexer),
+        b'S' => IDT(lexer),
+        b'T' => IDT(lexer),
+        b'U' => IDT(lexer),
+        b'V' => IDT(lexer),
+        b'W' => IDT(lexer),
+        b'X' => IDT(lexer),
+        b'Y' => IDT(lexer),
+        b'Z' => IDT(lexer),
+        b'[' => BTO(lexer),
+        b'\\' => ESC(lexer),
+        b']' => BTC(lexer),
+        b'^' => CRT(lexer),
+        b'_' => IDT(lexer),
+        b'`' => TPL(lexer),
+        b'a' => L_A(lexer),
+        b'b' => L_B(lexer),
+        b'c' => L_C(lexer),
+        b'd' => L_D(lexer),
+        b'e' => L_E(lexer),
+        b'f' => L_F(lexer),
+        b'g' => L_G(lexer),
+        b'h' => IDT(lexer),
+        b'i' => L_I(lexer),
+        b'j' => IDT(lexer),
+        b'k' => L_K(lexer),
+        b'l' => L_L(lexer),
+        b'm' => L_M(lexer),
+        b'n' => L_N(lexer),
+        b'o' => L_O(lexer),
+        b'p' => L_P(lexer),
+        b'q' => IDT(lexer),
+        b'r' => L_R(lexer),
+        b's' => L_S(lexer),
+        b't' => L_T(lexer),
+        b'u' => L_U(lexer),
+        b'v' => L_V(lexer),
+        b'w' => L_W(lexer),
+        b'x' => IDT(lexer),
+        b'y' => L_Y(lexer),
+        b'z' => IDT(lexer),
+        b'{' => BEO(lexer),
+        b'|' => PIP(lexer),
+        b'}' => BEC(lexer),
+        b'~' => TLD(lexer),
+        127 => ERR(lexer),
+        _ => UNI(lexer),
+    }
+}
 
-/// Lookup table mapping any incoming byte to a handler function defined below.
-/// <https://github.com/ratel-rust/ratel-core/blob/master/ratel/src/lexer/mod.rs>
-#[rustfmt::skip]
-static BYTE_HANDLERS: [ByteHandler; 256] = [
-//  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
-    SPS, EXL, QOT, HAS, IDT, PRC, AMP, QOT, PNO, PNC, ATR, PLS, COM, MIN, PRD, SLH, // 2
-    ZER, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, COL, SEM, LSS, EQL, GTR, QST, // 3
-    AT_, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, // 4
-    IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, BTO, ESC, BTC, CRT, IDT, // 5
-    TPL, L_A, L_B, L_C, L_D, L_E, L_F, L_G, IDT, L_I, IDT, L_K, L_L, L_M, L_N, L_O, // 6
-    L_P, IDT, L_R, L_S, L_T, L_U, L_V, L_W, IDT, L_Y, IDT, BEO, PIP, BEC, TLD, ERR, // 7
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 8
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
-];
+type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 
 // `\0` `\1` etc
 const ERR: ByteHandler = |lexer| {
-    // Next char is an ASCII char e.g. `\0`
-    let c = lexer.consume_ascii_char();
+    let c = lexer.consume_char();
     lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
     Kind::Undetermined
 };
 
 // <SPACE> <TAB> <VT> <FF>
 const SPS: ByteHandler = |lexer| {
-    // Next char is an ASCII space character
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::WhiteSpace
 };
 
 // '\r' '\n'
 const LIN: ByteHandler = |lexer| {
-    // Next char is `\r` or `\n`, which are both ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.current.token.is_on_new_line = true;
     Kind::NewLine
 };
 
 // !
 const EXL: ByteHandler = |lexer| {
-    // Next char is `!`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
             Kind::Neq2
@@ -1372,8 +1466,7 @@ const EXL: ByteHandler = |lexer| {
 
 // ' "
 const QOT: ByteHandler = |lexer| {
-    // Next char is `'` or `"`, which are both ASCII
-    let c = lexer.consume_ascii_char();
+    let c = lexer.consume_char();
     if lexer.context == LexerContext::JsxAttributeValue {
         lexer.read_jsx_string_literal(c)
     } else {
@@ -1383,8 +1476,7 @@ const QOT: ByteHandler = |lexer| {
 
 // #
 const HAS: ByteHandler = |lexer| {
-    // Next char is `#`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     // HashbangComment ::
     //     `#!` SingleLineCommentChars?
     if lexer.current.token.start == 0 && lexer.next_eq('!') {
@@ -1401,8 +1493,7 @@ const IDT: ByteHandler = |lexer| {
 
 // %
 const PRC: ByteHandler = |lexer| {
-    // Next char is `%`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('=') {
         Kind::PercentEq
     } else {
@@ -1412,8 +1503,7 @@ const PRC: ByteHandler = |lexer| {
 
 // &
 const AMP: ByteHandler = |lexer| {
-    // Next char is `&`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('&') {
         if lexer.next_eq('=') {
             Kind::Amp2Eq
@@ -1429,22 +1519,19 @@ const AMP: ByteHandler = |lexer| {
 
 // (
 const PNO: ByteHandler = |lexer| {
-    // Next char is `(`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::LParen
 };
 
 // )
 const PNC: ByteHandler = |lexer| {
-    // Next char is `)`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::RParen
 };
 
 // *
 const ATR: ByteHandler = |lexer| {
-    // Next char is `*`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('*') {
         if lexer.next_eq('=') {
             Kind::Star2Eq
@@ -1460,8 +1547,7 @@ const ATR: ByteHandler = |lexer| {
 
 // +
 const PLS: ByteHandler = |lexer| {
-    // Next char is `+`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('+') {
         Kind::Plus2
     } else if lexer.next_eq('=') {
@@ -1473,29 +1559,25 @@ const PLS: ByteHandler = |lexer| {
 
 // ,
 const COM: ByteHandler = |lexer| {
-    // Next char is `,`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::Comma
 };
 
 // -
 const MIN: ByteHandler = |lexer| {
-    // Next char is `-`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.read_minus().unwrap_or_else(|| lexer.skip_single_line_comment())
 };
 
 // .
 const PRD: ByteHandler = |lexer| {
-    // Next char is `.`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.read_dot()
 };
 
 // /
 const SLH: ByteHandler = |lexer| {
-    // Next char is `/`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     match lexer.peek() {
         Some('/') => {
             lexer.current.chars.next();
@@ -1518,43 +1600,37 @@ const SLH: ByteHandler = |lexer| {
 
 // 0
 const ZER: ByteHandler = |lexer| {
-    // Next char is `0`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.read_zero()
 };
 
 // 1 to 9
 const DIG: ByteHandler = |lexer| {
-    // Next char is an ASCII digit
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.decimal_literal_after_first_digit()
 };
 
 // :
 const COL: ByteHandler = |lexer| {
-    // Next char is `:`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::Colon
 };
 
 // ;
 const SEM: ByteHandler = |lexer| {
-    // Next char is `;`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::Semicolon
 };
 
 // <
 const LSS: ByteHandler = |lexer| {
-    // Next char is `<`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.read_left_angle().unwrap_or_else(|| lexer.skip_single_line_comment())
 };
 
 // =
 const EQL: ByteHandler = |lexer| {
-    // Next char is `=`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
             Kind::Eq3
@@ -1570,16 +1646,14 @@ const EQL: ByteHandler = |lexer| {
 
 // >
 const GTR: ByteHandler = |lexer| {
-    // Next char is `>`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     // `>=` is re-lexed with [Lexer::next_jsx_child]
     Kind::RAngle
 };
 
 // ?
 const QST: ByteHandler = |lexer| {
-    // Next char is `?`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('?') {
         if lexer.next_eq('=') {
             Kind::Question2Eq
@@ -1601,26 +1675,20 @@ const QST: ByteHandler = |lexer| {
 
 // @
 const AT_: ByteHandler = |lexer| {
-    // Next char is `@`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::At
 };
 
 // [
 const BTO: ByteHandler = |lexer| {
-    // Next char is `[`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::LBrack
 };
 
 // \
 const ESC: ByteHandler = |lexer| {
-    let lexer_ref = lexer as &Lexer<'_>;
-    let mut builder = AutoCow::new(lexer_ref);
-    // Next char at start of this function was `\`, which is ASCII.
-    // `AutoCow::new` cannot have changed the state of `lexer.current.chars` iterator,
-    // as we explicitly passed it only an immutable reference.
-    lexer.consume_ascii_char();
+    let mut builder = AutoCow::new(lexer);
+    lexer.consume_char();
     builder.force_allocation_without_current_ascii_char(lexer);
     lexer.identifier_unicode_escape_sequence(&mut builder, true);
     let text = lexer.identifier_name(builder);
@@ -1629,15 +1697,13 @@ const ESC: ByteHandler = |lexer| {
 
 // ]
 const BTC: ByteHandler = |lexer| {
-    // Next char is `]`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::RBrack
 };
 
 // ^
 const CRT: ByteHandler = |lexer| {
-    // Next char is `^`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('=') {
         Kind::CaretEq
     } else {
@@ -1647,22 +1713,19 @@ const CRT: ByteHandler = |lexer| {
 
 // `
 const TPL: ByteHandler = |lexer| {
-    // Next char is '`', which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     lexer.read_template_literal(Kind::TemplateHead, Kind::NoSubstitutionTemplate)
 };
 
 // {
 const BEO: ByteHandler = |lexer| {
-    // Next char is `{`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::LCurly
 };
 
 // |
 const PIP: ByteHandler = |lexer| {
-    // Next char is `|`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     if lexer.next_eq('|') {
         if lexer.next_eq('=') {
             Kind::Pipe2Eq
@@ -1678,15 +1741,13 @@ const PIP: ByteHandler = |lexer| {
 
 // }
 const BEC: ByteHandler = |lexer| {
-    // Next char is `}`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::RCurly
 };
 
 // ~
 const TLD: ByteHandler = |lexer| {
-    // Next char is `~`, which is ASCII
-    lexer.consume_ascii_char();
+    lexer.consume_char();
     Kind::Tilde
 };
 
