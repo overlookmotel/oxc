@@ -371,17 +371,8 @@ impl<'a> Lexer<'a> {
     /// Whitespace and line terminators are skipped
     fn read_next_token(&mut self) -> Kind {
         loop {
-            let offset = self.offset();
-            self.current.token.start = offset;
-
-            let remaining = self.current.chars.as_str();
-            if remaining.is_empty() {
-                return Kind::Eof;
-            }
-
-            let byte = remaining.as_bytes()[0];
-            let kind = handle_byte(byte, self);
-
+            self.current.token.start = self.offset();
+            let kind = match_char(self);
             if !matches!(
                 kind,
                 Kind::WhiteSpace | Kind::NewLine | Kind::Comment | Kind::MultiLineComment
@@ -1292,8 +1283,13 @@ enum SurrogatePair {
     HighLow(u32, u32),
 }
 
-#[inline]
-fn handle_byte(byte: u8, lexer: &mut Lexer) -> Kind {
+fn match_char(lexer: &mut Lexer) -> Kind {
+    let remaining = lexer.current.chars.as_str();
+    if remaining.is_empty() {
+        return Kind::Eof;
+    }
+
+    let byte = remaining.as_bytes()[0];
     #[allow(clippy::match_same_arms)]
     match byte {
         0 => ERR(lexer),
