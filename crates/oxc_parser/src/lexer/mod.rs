@@ -11,7 +11,6 @@ mod string_builder;
 mod token;
 mod trivia_builder;
 
-use assert_unchecked::assert_unchecked;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
@@ -1327,55 +1326,57 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
 ];
 
-/// Assert that lexer is not at end of file, and that next char is ASCII.
+/// Macro for defining byte handler for an ASCII character.
 ///
-/// This function produces no runtime code, but calling it hints to the compiler that it can
-/// assume that next char is ASCII, and use that information to optimize code that follows.
-/// e.g. `lexer.current.chars.next()` becomes just a single assembler instruction if it follows
-/// `next_char_is_ascii(lexer)`.
+/// In addition to defining a `const` for the handler, it also asserts that lexer
+/// is not at end of file, and that next char is ASCII.
+/// Where the handler is for an ASCII character, these assertions are self-evidently true.
 ///
-/// This function is called at start of each of the byte handlers for ASCII characters,
-/// because by definition they're there to handle the an ASCII character, but compiler is unable
-/// to see this due to the indirection of the `BYTE_HANDLERS` jump table.
+/// These assertions produce no runtime code, but hint to the compiler that it can assume that
+/// next char is ASCII, and it uses that information to optimize the rest of the handler.
+/// e.g. `lexer.current.chars.next()` becomes just a single assembler instruction.
+/// Without the assertions, the compiler is unable to deduce the next char is ASCII, due to
+/// the indirection of the `BYTE_HANDLERS` jump table.
 ///
-/// SAFETY: Caller must ensure lexer has not reached end of file, and next char is ASCII.
-#[inline(always)]
-unsafe fn next_char_is_ascii(lexer: &mut Lexer) {
-    let s = lexer.current.chars.as_str();
-    assert_unchecked!(!s.is_empty());
-    assert_unchecked!(s.as_bytes()[0] < 128);
+/// These assertions are unchecked (i.e. won't panic) and will cause UB if they're incorrect.
+///
+/// SAFETY: Only use this macro to define byte handlers for ASCII characters.
+macro_rules! ascii_byte_handler {
+    ($id:ident($lex:ident) $body:expr) => {
+        const $id: ByteHandler = |$lex| {
+            unsafe {
+                use ::assert_unchecked::assert_unchecked;
+                let s = $lex.current.chars.as_str();
+                assert_unchecked!(!s.is_empty());
+                assert_unchecked!(s.as_bytes()[0] < 128);
+            }
+            $body
+        };
+    };
 }
 
 // `\0` `\1` etc
-const ERR: ByteHandler = |lexer| {
-    // SAFETY: Next char is an ASCII char e.g. `\0`
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(ERR(lexer) {
     let c = lexer.consume_char();
     lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
     Kind::Undetermined
-};
+});
 
 // <SPACE> <TAB> <VT> <FF>
-const SPS: ByteHandler = |lexer| {
-    // SAFETY: Next char is an ASCII space character
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(SPS(lexer) {
     lexer.consume_char();
     Kind::WhiteSpace
-};
+});
 
 // '\r' '\n'
-const LIN: ByteHandler = |lexer| {
-    // SAFETY: Next char is `\r` or `\n`, which are both ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(LIN(lexer) {
     lexer.consume_char();
     lexer.current.token.is_on_new_line = true;
     Kind::NewLine
-};
+});
 
 // !
-const EXL: ByteHandler = |lexer| {
-    // SAFETY: Next char is `!`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(EXL(lexer) {
     lexer.consume_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
@@ -1386,24 +1387,20 @@ const EXL: ByteHandler = |lexer| {
     } else {
         Kind::Bang
     }
-};
+});
 
 // ' "
-const QOT: ByteHandler = |lexer| {
-    // SAFETY: Next char is `'` or `"`, which are both ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(QOT(lexer) {
     let c = lexer.consume_char();
     if lexer.context == LexerContext::JsxAttributeValue {
         lexer.read_jsx_string_literal(c)
     } else {
         lexer.read_string_literal(c)
     }
-};
+});
 
 // #
-const HAS: ByteHandler = |lexer| {
-    // SAFETY: Next char is `#`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(HAS(lexer) {
     lexer.consume_char();
     // HashbangComment ::
     //     `#!` SingleLineCommentChars?
@@ -1412,31 +1409,26 @@ const HAS: ByteHandler = |lexer| {
     } else {
         lexer.private_identifier()
     }
-};
+});
 
-const IDT: ByteHandler = |lexer| {
-    // SAFETY: Next char is `A..=Z`, `a..=z`, `_` or `$`, are of which are ASCII
-    unsafe { next_char_is_ascii(lexer) };
+// `A..=Z`, `a..=z` (except special cases below), `_`, `$`
+ascii_byte_handler!(IDT(lexer) {
     lexer.identifier_name_handler();
     Kind::Ident
-};
+});
 
 // %
-const PRC: ByteHandler = |lexer| {
-    // SAFETY: Next char is `%`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PRC(lexer) {
     lexer.consume_char();
     if lexer.next_eq('=') {
         Kind::PercentEq
     } else {
         Kind::Percent
     }
-};
+});
 
 // &
-const AMP: ByteHandler = |lexer| {
-    // SAFETY: Next char is `&`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(AMP(lexer) {
     lexer.consume_char();
     if lexer.next_eq('&') {
         if lexer.next_eq('=') {
@@ -1449,28 +1441,22 @@ const AMP: ByteHandler = |lexer| {
     } else {
         Kind::Amp
     }
-};
+});
 
 // (
-const PNO: ByteHandler = |lexer| {
-    // SAFETY: Next char is `(`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PNO(lexer) {
     lexer.consume_char();
     Kind::LParen
-};
+});
 
 // )
-const PNC: ByteHandler = |lexer| {
-    // SAFETY: Next char is `)`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PNC(lexer) {
     lexer.consume_char();
     Kind::RParen
-};
+});
 
 // *
-const ATR: ByteHandler = |lexer| {
-    // SAFETY: Next char is `*`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(ATR(lexer) {
     lexer.consume_char();
     if lexer.next_eq('*') {
         if lexer.next_eq('=') {
@@ -1483,12 +1469,10 @@ const ATR: ByteHandler = |lexer| {
     } else {
         Kind::Star
     }
-};
+});
 
 // +
-const PLS: ByteHandler = |lexer| {
-    // SAFETY: Next char is `+`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PLS(lexer) {
     lexer.consume_char();
     if lexer.next_eq('+') {
         Kind::Plus2
@@ -1497,36 +1481,28 @@ const PLS: ByteHandler = |lexer| {
     } else {
         Kind::Plus
     }
-};
+});
 
 // ,
-const COM: ByteHandler = |lexer| {
-    // SAFETY: Next char is `,`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(COM(lexer) {
     lexer.consume_char();
     Kind::Comma
-};
+});
 
 // -
-const MIN: ByteHandler = |lexer| {
-    // SAFETY: Next char is `-`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(MIN(lexer) {
     lexer.consume_char();
     lexer.read_minus().unwrap_or_else(|| lexer.skip_single_line_comment())
-};
+});
 
 // .
-const PRD: ByteHandler = |lexer| {
-    // SAFETY: Next char is `.`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PRD(lexer) {
     lexer.consume_char();
     lexer.read_dot()
-};
+});
 
 // /
-const SLH: ByteHandler = |lexer| {
-    // SAFETY: Next char is `/`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(SLH(lexer) {
     lexer.consume_char();
     match lexer.peek() {
         Some('/') => {
@@ -1546,52 +1522,40 @@ const SLH: ByteHandler = |lexer| {
             }
         }
     }
-};
+});
 
 // 0
-const ZER: ByteHandler = |lexer| {
-    // SAFETY: Next char is `0`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(ZER(lexer) {
     lexer.consume_char();
     lexer.read_zero()
-};
+});
 
 // 1 to 9
-const DIG: ByteHandler = |lexer| {
-    // SAFETY: Next char is an ASCII digit
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(DIG(lexer) {
     lexer.consume_char();
     lexer.decimal_literal_after_first_digit()
-};
+});
 
 // :
-const COL: ByteHandler = |lexer| {
-    // SAFETY: Next char is `:`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(COL(lexer) {
     lexer.consume_char();
     Kind::Colon
-};
+});
 
 // ;
-const SEM: ByteHandler = |lexer| {
-    // SAFETY: Next char is `;`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(SEM(lexer) {
     lexer.consume_char();
     Kind::Semicolon
-};
+});
 
 // <
-const LSS: ByteHandler = |lexer| {
-    // SAFETY: Next char is `<`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(LSS(lexer) {
     lexer.consume_char();
     lexer.read_left_angle().unwrap_or_else(|| lexer.skip_single_line_comment())
-};
+});
 
 // =
-const EQL: ByteHandler = |lexer| {
-    // SAFETY: Next char is `=`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(EQL(lexer) {
     lexer.consume_char();
     if lexer.next_eq('=') {
         if lexer.next_eq('=') {
@@ -1604,21 +1568,17 @@ const EQL: ByteHandler = |lexer| {
     } else {
         Kind::Eq
     }
-};
+});
 
 // >
-const GTR: ByteHandler = |lexer| {
-    // SAFETY: Next char is `>`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(GTR(lexer) {
     lexer.consume_char();
     // `>=` is re-lexed with [Lexer::next_jsx_child]
     Kind::RAngle
-};
+});
 
 // ?
-const QST: ByteHandler = |lexer| {
-    // SAFETY: Next char is `?`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(QST(lexer) {
     lexer.consume_char();
     if lexer.next_eq('?') {
         if lexer.next_eq('=') {
@@ -1637,76 +1597,60 @@ const QST: ByteHandler = |lexer| {
     } else {
         Kind::Question
     }
-};
+});
 
 // @
-const AT_: ByteHandler = |lexer| {
-    // SAFETY: Next char is `@`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(AT_(lexer) {
     lexer.consume_char();
     Kind::At
-};
+});
 
 // [
-const BTO: ByteHandler = |lexer| {
-    // SAFETY: Next char is `[`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(BTO(lexer) {
     lexer.consume_char();
     Kind::LBrack
-};
+});
 
 // \
-const ESC: ByteHandler = |lexer| {
-    // SAFETY: Next char is `\`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(ESC(lexer) {
     let mut builder = AutoCow::new(lexer);
     lexer.consume_char();
     builder.force_allocation_without_current_ascii_char(lexer);
     lexer.identifier_unicode_escape_sequence(&mut builder, true);
     let text = lexer.identifier_name(builder);
     Kind::match_keyword(text)
-};
+});
 
 // ]
-const BTC: ByteHandler = |lexer| {
-    // SAFETY: Next char is `]`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(BTC(lexer) {
     lexer.consume_char();
     Kind::RBrack
-};
+});
 
 // ^
-const CRT: ByteHandler = |lexer| {
-    // SAFETY: Next char is `^`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(CRT(lexer) {
     lexer.consume_char();
     if lexer.next_eq('=') {
         Kind::CaretEq
     } else {
         Kind::Caret
     }
-};
+});
 
 // `
-const TPL: ByteHandler = |lexer| {
-    // SAFETY: Next char is '`', which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(TPL(lexer) {
     lexer.consume_char();
     lexer.read_template_literal(Kind::TemplateHead, Kind::NoSubstitutionTemplate)
-};
+});
 
 // {
-const BEO: ByteHandler = |lexer| {
-    // SAFETY: Next char is `{`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(BEO(lexer) {
     lexer.consume_char();
     Kind::LCurly
-};
+});
 
 // |
-const PIP: ByteHandler = |lexer| {
-    // SAFETY: Next char is `|`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(PIP(lexer) {
     lexer.consume_char();
     if lexer.next_eq('|') {
         if lexer.next_eq('=') {
@@ -1719,277 +1663,190 @@ const PIP: ByteHandler = |lexer| {
     } else {
         Kind::Pipe
     }
-};
+});
 
 // }
-const BEC: ByteHandler = |lexer| {
-    // SAFETY: Next char is `}`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(BEC(lexer) {
     lexer.consume_char();
     Kind::RCurly
-};
+});
 
 // ~
-const TLD: ByteHandler = |lexer| {
-    // SAFETY: Next char is `~`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
+ascii_byte_handler!(TLD(lexer) {
     lexer.consume_char();
     Kind::Tilde
-};
+});
 
-const L_A: ByteHandler = |lexer| {
-    // SAFETY: Next char is `A`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "wait" => Kind::Await,
-        "sync" => Kind::Async,
-        "bstract" => Kind::Abstract,
-        "ccessor" => Kind::Accessor,
-        "ny" => Kind::Any,
-        "s" => Kind::As,
-        "ssert" => Kind::Assert,
-        "sserts" => Kind::Asserts,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_A(lexer) match &lexer.identifier_name_handler()[1..] {
+    "wait" => Kind::Await,
+    "sync" => Kind::Async,
+    "bstract" => Kind::Abstract,
+    "ccessor" => Kind::Accessor,
+    "ny" => Kind::Any,
+    "s" => Kind::As,
+    "ssert" => Kind::Assert,
+    "sserts" => Kind::Asserts,
+    _ => Kind::Ident,
+});
 
-const L_B: ByteHandler = |lexer| {
-    // SAFETY: Next char is `B`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "reak" => Kind::Break,
-        "oolean" => Kind::Boolean,
-        "igint" => Kind::BigInt,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_B(lexer) match &lexer.identifier_name_handler()[1..] {
+    "reak" => Kind::Break,
+    "oolean" => Kind::Boolean,
+    "igint" => Kind::BigInt,
+    _ => Kind::Ident,
+});
 
-const L_C: ByteHandler = |lexer| {
-    // SAFETY: Next char is `C`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "onst" => Kind::Const,
-        "lass" => Kind::Class,
-        "ontinue" => Kind::Continue,
-        "atch" => Kind::Catch,
-        "ase" => Kind::Case,
-        "onstructor" => Kind::Constructor,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_C(lexer) match &lexer.identifier_name_handler()[1..] {
+    "onst" => Kind::Const,
+    "lass" => Kind::Class,
+    "ontinue" => Kind::Continue,
+    "atch" => Kind::Catch,
+    "ase" => Kind::Case,
+    "onstructor" => Kind::Constructor,
+    _ => Kind::Ident,
+});
 
-const L_D: ByteHandler = |lexer| {
-    // SAFETY: Next char is `D`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "o" => Kind::Do,
-        "elete" => Kind::Delete,
-        "eclare" => Kind::Declare,
-        "efault" => Kind::Default,
-        "ebugger" => Kind::Debugger,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_D(lexer) match &lexer.identifier_name_handler()[1..] {
+    "o" => Kind::Do,
+    "elete" => Kind::Delete,
+    "eclare" => Kind::Declare,
+    "efault" => Kind::Default,
+    "ebugger" => Kind::Debugger,
+    _ => Kind::Ident,
+});
 
-const L_E: ByteHandler = |lexer| {
-    // SAFETY: Next char is `E`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "lse" => Kind::Else,
-        "num" => Kind::Enum,
-        "xport" => Kind::Export,
-        "xtends" => Kind::Extends,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_E(lexer) match &lexer.identifier_name_handler()[1..] {
+    "lse" => Kind::Else,
+    "num" => Kind::Enum,
+    "xport" => Kind::Export,
+    "xtends" => Kind::Extends,
+    _ => Kind::Ident,
+});
 
-const L_F: ByteHandler = |lexer| {
-    // SAFETY: Next char is `F`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "unction" => Kind::Function,
-        "alse" => Kind::False,
-        "or" => Kind::For,
-        "inally" => Kind::Finally,
-        "rom" => Kind::From,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_F(lexer) match &lexer.identifier_name_handler()[1..] {
+    "unction" => Kind::Function,
+    "alse" => Kind::False,
+    "or" => Kind::For,
+    "inally" => Kind::Finally,
+    "rom" => Kind::From,
+    _ => Kind::Ident,
+});
 
-const L_G: ByteHandler = |lexer| {
-    // SAFETY: Next char is `G`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Get,
-        "lobal" => Kind::Global,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_G(lexer) match &lexer.identifier_name_handler()[1..] {
+    "et" => Kind::Get,
+    "lobal" => Kind::Global,
+    _ => Kind::Ident,
+});
 
-const L_I: ByteHandler = |lexer| {
-    // SAFETY: Next char is `I`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "f" => Kind::If,
-        "nstanceof" => Kind::Instanceof,
-        "n" => Kind::In,
-        "mplements" => Kind::Implements,
-        "mport" => Kind::Import,
-        "nfer" => Kind::Infer,
-        "nterface" => Kind::Interface,
-        "ntrinsic" => Kind::Intrinsic,
-        "s" => Kind::Is,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_I(lexer) match &lexer.identifier_name_handler()[1..] {
+    "f" => Kind::If,
+    "nstanceof" => Kind::Instanceof,
+    "n" => Kind::In,
+    "mplements" => Kind::Implements,
+    "mport" => Kind::Import,
+    "nfer" => Kind::Infer,
+    "nterface" => Kind::Interface,
+    "ntrinsic" => Kind::Intrinsic,
+    "s" => Kind::Is,
+    _ => Kind::Ident,
+});
 
-const L_K: ByteHandler = |lexer| {
-    // SAFETY: Next char is `K`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "eyof" => Kind::KeyOf,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_K(lexer) match &lexer.identifier_name_handler()[1..] {
+    "eyof" => Kind::KeyOf,
+    _ => Kind::Ident,
+});
 
-const L_L: ByteHandler = |lexer| {
-    // SAFETY: Next char is `L`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Let,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_L(lexer) match &lexer.identifier_name_handler()[1..] {
+    "et" => Kind::Let,
+    _ => Kind::Ident,
+});
 
-const L_M: ByteHandler = |lexer| {
-    // SAFETY: Next char is `M`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "eta" => Kind::Meta,
-        "odule" => Kind::Module,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_M(lexer) match &lexer.identifier_name_handler()[1..] {
+    "eta" => Kind::Meta,
+    "odule" => Kind::Module,
+    _ => Kind::Ident,
+});
 
-const L_N: ByteHandler = |lexer| {
-    // SAFETY: Next char is `N`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "ull" => Kind::Null,
-        "ew" => Kind::New,
-        "umber" => Kind::Number,
-        "amespace" => Kind::Namespace,
-        "ever" => Kind::Never,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_N(lexer) match &lexer.identifier_name_handler()[1..] {
+    "ull" => Kind::Null,
+    "ew" => Kind::New,
+    "umber" => Kind::Number,
+    "amespace" => Kind::Namespace,
+    "ever" => Kind::Never,
+    _ => Kind::Ident,
+});
 
-const L_O: ByteHandler = |lexer| {
-    // SAFETY: Next char is `O`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "f" => Kind::Of,
-        "bject" => Kind::Object,
-        "ut" => Kind::Out,
-        "verride" => Kind::Override,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_O(lexer) match &lexer.identifier_name_handler()[1..] {
+    "f" => Kind::Of,
+    "bject" => Kind::Object,
+    "ut" => Kind::Out,
+    "verride" => Kind::Override,
+    _ => Kind::Ident,
+});
 
-const L_P: ByteHandler = |lexer| {
-    // SAFETY: Next char is `P`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "ackage" => Kind::Package,
-        "rivate" => Kind::Private,
-        "rotected" => Kind::Protected,
-        "ublic" => Kind::Public,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_P(lexer) match &lexer.identifier_name_handler()[1..] {
+    "ackage" => Kind::Package,
+    "rivate" => Kind::Private,
+    "rotected" => Kind::Protected,
+    "ublic" => Kind::Public,
+    _ => Kind::Ident,
+});
 
-const L_R: ByteHandler = |lexer| {
-    // SAFETY: Next char is `R`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "eturn" => Kind::Return,
-        "equire" => Kind::Require,
-        "eadonly" => Kind::Readonly,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_R(lexer) match &lexer.identifier_name_handler()[1..] {
+    "eturn" => Kind::Return,
+    "equire" => Kind::Require,
+    "eadonly" => Kind::Readonly,
+    _ => Kind::Ident,
+});
 
-const L_S: ByteHandler = |lexer| {
-    // SAFETY: Next char is `S`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Set,
-        "uper" => Kind::Super,
-        "witch" => Kind::Switch,
-        "tatic" => Kind::Static,
-        "ymbol" => Kind::Symbol,
-        "tring" => Kind::String,
-        "atisfies" => Kind::Satisfies,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_S(lexer) match &lexer.identifier_name_handler()[1..] {
+    "et" => Kind::Set,
+    "uper" => Kind::Super,
+    "witch" => Kind::Switch,
+    "tatic" => Kind::Static,
+    "ymbol" => Kind::Symbol,
+    "tring" => Kind::String,
+    "atisfies" => Kind::Satisfies,
+    _ => Kind::Ident,
+});
 
-const L_T: ByteHandler = |lexer| {
-    // SAFETY: Next char is `T`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "his" => Kind::This,
-        "rue" => Kind::True,
-        "hrow" => Kind::Throw,
-        "ry" => Kind::Try,
-        "ypeof" => Kind::Typeof,
-        "arget" => Kind::Target,
-        "ype" => Kind::Type,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_T(lexer) match &lexer.identifier_name_handler()[1..] {
+    "his" => Kind::This,
+    "rue" => Kind::True,
+    "hrow" => Kind::Throw,
+    "ry" => Kind::Try,
+    "ypeof" => Kind::Typeof,
+    "arget" => Kind::Target,
+    "ype" => Kind::Type,
+    _ => Kind::Ident,
+});
 
-const L_U: ByteHandler = |lexer| {
-    // SAFETY: Next char is `U`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "ndefined" => Kind::Undefined,
-        "sing" => Kind::Using,
-        "nique" => Kind::Unique,
-        "nknown" => Kind::Unknown,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_U(lexer) match &lexer.identifier_name_handler()[1..] {
+    "ndefined" => Kind::Undefined,
+    "sing" => Kind::Using,
+    "nique" => Kind::Unique,
+    "nknown" => Kind::Unknown,
+    _ => Kind::Ident,
+});
 
-const L_V: ByteHandler = |lexer| {
-    // SAFETY: Next char is `V`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "ar" => Kind::Var,
-        "oid" => Kind::Void,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_V(lexer) match &lexer.identifier_name_handler()[1..] {
+    "ar" => Kind::Var,
+    "oid" => Kind::Void,
+    _ => Kind::Ident,
+});
 
-const L_W: ByteHandler = |lexer| {
-    // SAFETY: Next char is `W`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "hile" => Kind::While,
-        "ith" => Kind::With,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_W(lexer) match &lexer.identifier_name_handler()[1..] {
+    "hile" => Kind::While,
+    "ith" => Kind::With,
+    _ => Kind::Ident,
+});
 
-const L_Y: ByteHandler = |lexer| {
-    // SAFETY: Next char is `Y`, which is ASCII
-    unsafe { next_char_is_ascii(lexer) };
-    match &lexer.identifier_name_handler()[1..] {
-        "ield" => Kind::Yield,
-        _ => Kind::Ident,
-    }
-};
+ascii_byte_handler!(L_Y(lexer) match &lexer.identifier_name_handler()[1..] {
+    "ield" => Kind::Yield,
+    _ => Kind::Ident,
+});
 
-// Non-ASCII characters
+// Non-ASCII characters.
+// NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
 #[allow(clippy::redundant_closure_for_method_calls)]
 const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
