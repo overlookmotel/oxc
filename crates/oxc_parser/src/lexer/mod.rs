@@ -1303,6 +1303,7 @@ enum SurrogatePair {
     HighLow(u32, u32),
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn match_char(lexer: &mut Lexer) -> Kind {
     let remaining = lexer.current.chars.as_str();
     if remaining.is_empty() {
@@ -1310,668 +1311,410 @@ fn match_char(lexer: &mut Lexer) -> Kind {
     }
 
     let byte = remaining.as_bytes()[0];
-    #[allow(clippy::match_same_arms)]
     match byte {
-        0 => ERR(lexer),
-        1 => ERR(lexer),
-        2 => ERR(lexer),
-        3 => ERR(lexer),
-        4 => ERR(lexer),
-        5 => ERR(lexer),
-        6 => ERR(lexer),
-        7 => ERR(lexer),
-        8 => ERR(lexer),
-        b'\t' => SPS(lexer),
-        b'\n' => LIN(lexer),
-        11 => SPS(lexer),
-        12 => SPS(lexer),
-        b'\r' => LIN(lexer),
-        14 => ERR(lexer),
-        15 => ERR(lexer),
-        16 => ERR(lexer),
-        17 => ERR(lexer),
-        18 => ERR(lexer),
-        19 => ERR(lexer),
-        20 => ERR(lexer),
-        21 => ERR(lexer),
-        22 => ERR(lexer),
-        23 => ERR(lexer),
-        24 => ERR(lexer),
-        25 => ERR(lexer),
-        26 => ERR(lexer),
-        27 => ERR(lexer),
-        28 => ERR(lexer),
-        29 => ERR(lexer),
-        30 => ERR(lexer),
-        31 => ERR(lexer),
-        b' ' => SPS(lexer),
-        b'!' => EXL(lexer),
-        b'"' => QOT(lexer),
-        b'#' => HAS(lexer),
-        b'$' => IDT(lexer),
-        b'%' => PRC(lexer),
-        b'&' => AMP(lexer),
-        b'\'' => QOT(lexer),
-        b'(' => PNO(lexer),
-        b')' => PNC(lexer),
-        b'*' => ATR(lexer),
-        b'+' => PLS(lexer),
-        b',' => COM(lexer),
-        b'-' => MIN(lexer),
-        b'.' => PRD(lexer),
-        b'/' => SLH(lexer),
-        b'0' => ZER(lexer),
-        b'1' => DIG(lexer),
-        b'2' => DIG(lexer),
-        b'3' => DIG(lexer),
-        b'4' => DIG(lexer),
-        b'5' => DIG(lexer),
-        b'6' => DIG(lexer),
-        b'7' => DIG(lexer),
-        b'8' => DIG(lexer),
-        b'9' => DIG(lexer),
-        b':' => COL(lexer),
-        b';' => SEM(lexer),
-        b'<' => LSS(lexer),
-        b'=' => EQL(lexer),
-        b'>' => GTR(lexer),
-        b'?' => QST(lexer),
-        b'@' => AT_(lexer),
-        b'A' => IDT(lexer),
-        b'B' => IDT(lexer),
-        b'C' => IDT(lexer),
-        b'D' => IDT(lexer),
-        b'E' => IDT(lexer),
-        b'F' => IDT(lexer),
-        b'G' => IDT(lexer),
-        b'H' => IDT(lexer),
-        b'I' => IDT(lexer),
-        b'J' => IDT(lexer),
-        b'K' => IDT(lexer),
-        b'L' => IDT(lexer),
-        b'M' => IDT(lexer),
-        b'N' => IDT(lexer),
-        b'O' => IDT(lexer),
-        b'P' => IDT(lexer),
-        b'Q' => IDT(lexer),
-        b'R' => IDT(lexer),
-        b'S' => IDT(lexer),
-        b'T' => IDT(lexer),
-        b'U' => IDT(lexer),
-        b'V' => IDT(lexer),
-        b'W' => IDT(lexer),
-        b'X' => IDT(lexer),
-        b'Y' => IDT(lexer),
-        b'Z' => IDT(lexer),
-        b'[' => BTO(lexer),
-        b'\\' => ESC(lexer),
-        b']' => BTC(lexer),
-        b'^' => CRT(lexer),
-        b'_' => IDT(lexer),
-        b'`' => TPL(lexer),
-        b'a' => L_A(lexer),
-        b'b' => L_B(lexer),
-        b'c' => L_C(lexer),
-        b'd' => L_D(lexer),
-        b'e' => L_E(lexer),
-        b'f' => L_F(lexer),
-        b'g' => L_G(lexer),
-        b'h' => IDT(lexer),
-        b'i' => L_I(lexer),
-        b'j' => IDT(lexer),
-        b'k' => L_K(lexer),
-        b'l' => L_L(lexer),
-        b'm' => L_M(lexer),
-        b'n' => L_N(lexer),
-        b'o' => L_O(lexer),
-        b'p' => L_P(lexer),
-        b'q' => IDT(lexer),
-        b'r' => L_R(lexer),
-        b's' => L_S(lexer),
-        b't' => L_T(lexer),
-        b'u' => L_U(lexer),
-        b'v' => L_V(lexer),
-        b'w' => L_W(lexer),
-        b'x' => IDT(lexer),
-        b'y' => L_Y(lexer),
-        b'z' => IDT(lexer),
-        b'{' => BEO(lexer),
-        b'|' => PIP(lexer),
-        b'}' => BEC(lexer),
-        b'~' => TLD(lexer),
-        127 => ERR(lexer),
-        _ => lexer.unicode_char_handler(),
-    }
-}
-
-// `\0` `\1` etc
-fn ERR(lexer: &mut Lexer) -> Kind {
-    let c = lexer.consume_ascii_char();
-    lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
-    Kind::Undetermined
-}
-
-// <SPACE> <TAB> <VT> <FF>
-fn SPS(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::WhiteSpace
-}
-
-// '\r' '\n'
-fn LIN(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.current.token.is_on_new_line = true;
-    Kind::NewLine
-}
-
-// !
-fn EXL(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('=') {
-        if lexer.next_eq('=') {
-            Kind::Neq2
-        } else {
-            Kind::Neq
+        0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23
+        | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 127 => {
+            let c = lexer.consume_ascii_char();
+            lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
+            Kind::Undetermined
         }
-    } else {
-        Kind::Bang
-    }
-}
-
-// ' "
-fn QOT(lexer: &mut Lexer) -> Kind {
-    let c = lexer.consume_ascii_char();
-    if lexer.context == LexerContext::JsxAttributeValue {
-        lexer.read_jsx_string_literal(c)
-    } else {
-        lexer.read_string_literal(c)
-    }
-}
-
-// #
-fn HAS(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    // HashbangComment ::
-    //     `#!` SingleLineCommentChars?
-    if lexer.current.token.start == 0 && lexer.next_eq('!') {
-        lexer.read_hashbang_comment()
-    } else {
-        lexer.private_identifier()
-    }
-}
-
-fn IDT(lexer: &mut Lexer) -> Kind {
-    lexer.identifier_name_handler();
-    Kind::Ident
-}
-
-// %
-fn PRC(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('=') {
-        Kind::PercentEq
-    } else {
-        Kind::Percent
-    }
-}
-
-// &
-fn AMP(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('&') {
-        if lexer.next_eq('=') {
-            Kind::Amp2Eq
-        } else {
-            Kind::Amp2
+        b'\t' | 11 | 12 | b' ' => {
+            lexer.consume_ascii_char();
+            Kind::WhiteSpace
         }
-    } else if lexer.next_eq('=') {
-        Kind::AmpEq
-    } else {
-        Kind::Amp
-    }
-}
-
-// (
-fn PNO(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::LParen
-}
-
-// )
-fn PNC(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::RParen
-}
-
-// *
-fn ATR(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('*') {
-        if lexer.next_eq('=') {
-            Kind::Star2Eq
-        } else {
-            Kind::Star2
+        b'\n' | b'\r' => {
+            lexer.consume_ascii_char();
+            lexer.current.token.is_on_new_line = true;
+            Kind::NewLine
         }
-    } else if lexer.next_eq('=') {
-        Kind::StarEq
-    } else {
-        Kind::Star
-    }
-}
-
-// +
-fn PLS(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('+') {
-        Kind::Plus2
-    } else if lexer.next_eq('=') {
-        Kind::PlusEq
-    } else {
-        Kind::Plus
-    }
-}
-
-// ,
-fn COM(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::Comma
-}
-
-// -
-fn MIN(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.read_minus().unwrap_or_else(|| lexer.skip_single_line_comment())
-}
-
-// .
-fn PRD(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.read_dot()
-}
-
-// /
-fn SLH(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    match lexer.peek() {
-        Some('/') => {
-            lexer.current.chars.next();
-            lexer.skip_single_line_comment()
-        }
-        Some('*') => {
-            lexer.current.chars.next();
-            lexer.skip_multi_line_comment()
-        }
-        _ => {
-            // regex is handled separately, see `next_regex`
+        b'!' => {
+            lexer.consume_ascii_char();
             if lexer.next_eq('=') {
-                Kind::SlashEq
+                if lexer.next_eq('=') {
+                    Kind::Neq2
+                } else {
+                    Kind::Neq
+                }
             } else {
-                Kind::Slash
+                Kind::Bang
             }
         }
-    }
-}
-
-// 0
-fn ZER(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.read_zero()
-}
-
-// 1 to 9
-fn DIG(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.decimal_literal_after_first_digit()
-}
-
-// :
-fn COL(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::Colon
-}
-
-// ;
-fn SEM(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::Semicolon
-}
-
-// <
-fn LSS(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.read_left_angle().unwrap_or_else(|| lexer.skip_single_line_comment())
-}
-
-// =
-fn EQL(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('=') {
-        if lexer.next_eq('=') {
-            Kind::Eq3
-        } else {
-            Kind::Eq2
+        b'"' | b'\'' => {
+            let c = lexer.consume_ascii_char();
+            if lexer.context == LexerContext::JsxAttributeValue {
+                lexer.read_jsx_string_literal(c)
+            } else {
+                lexer.read_string_literal(c)
+            }
         }
-    } else if lexer.next_eq('>') {
-        Kind::Arrow
-    } else {
-        Kind::Eq
-    }
-}
-
-// >
-fn GTR(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    // `>=` is re-lexed with [Lexer::next_jsx_child]
-    Kind::RAngle
-}
-
-// ?
-fn QST(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('?') {
-        if lexer.next_eq('=') {
-            Kind::Question2Eq
-        } else {
-            Kind::Question2
+        b'#' => {
+            lexer.consume_ascii_char();
+            // HashbangComment ::
+            //     `#!` SingleLineCommentChars?
+            if lexer.current.token.start == 0 && lexer.next_eq('!') {
+                lexer.read_hashbang_comment()
+            } else {
+                lexer.private_identifier()
+            }
         }
-    } else if lexer.peek() == Some('.') {
-        // parse `?.1` as `?` `.1`
-        if lexer.peek2().is_some_and(|c| c.is_ascii_digit()) {
-            Kind::Question
-        } else {
-            lexer.current.chars.next();
-            Kind::QuestionDot
+        b'%' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('=') {
+                Kind::PercentEq
+            } else {
+                Kind::Percent
+            }
         }
-    } else {
-        Kind::Question
-    }
-}
-
-// @
-fn AT_(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::At
-}
-
-// [
-fn BTO(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::LBrack
-}
-
-// \
-fn ESC(lexer: &mut Lexer) -> Kind {
-    let mut builder = AutoCow::new(lexer);
-    lexer.consume_ascii_char();
-    builder.force_allocation_without_current_ascii_char(lexer);
-    lexer.identifier_unicode_escape_sequence(&mut builder, true);
-    let text = lexer.identifier_name(builder);
-    Kind::match_keyword(text)
-}
-
-// ]
-fn BTC(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::RBrack
-}
-
-// ^
-fn CRT(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('=') {
-        Kind::CaretEq
-    } else {
-        Kind::Caret
-    }
-}
-
-// `
-fn TPL(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    lexer.read_template_literal(Kind::TemplateHead, Kind::NoSubstitutionTemplate)
-}
-
-// {
-fn BEO(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::LCurly
-}
-
-// |
-fn PIP(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    if lexer.next_eq('|') {
-        if lexer.next_eq('=') {
-            Kind::Pipe2Eq
-        } else {
-            Kind::Pipe2
+        b'&' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('&') {
+                if lexer.next_eq('=') {
+                    Kind::Amp2Eq
+                } else {
+                    Kind::Amp2
+                }
+            } else if lexer.next_eq('=') {
+                Kind::AmpEq
+            } else {
+                Kind::Amp
+            }
         }
-    } else if lexer.next_eq('=') {
-        Kind::PipeEq
-    } else {
-        Kind::Pipe
-    }
-}
-
-// }
-fn BEC(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::RCurly
-}
-
-// ~
-fn TLD(lexer: &mut Lexer) -> Kind {
-    lexer.consume_ascii_char();
-    Kind::Tilde
-}
-
-fn L_A(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "wait" => Kind::Await,
-        "sync" => Kind::Async,
-        "bstract" => Kind::Abstract,
-        "ccessor" => Kind::Accessor,
-        "ny" => Kind::Any,
-        "s" => Kind::As,
-        "ssert" => Kind::Assert,
-        "sserts" => Kind::Asserts,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_B(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "reak" => Kind::Break,
-        "oolean" => Kind::Boolean,
-        "igint" => Kind::BigInt,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_C(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "onst" => Kind::Const,
-        "lass" => Kind::Class,
-        "ontinue" => Kind::Continue,
-        "atch" => Kind::Catch,
-        "ase" => Kind::Case,
-        "onstructor" => Kind::Constructor,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_D(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "o" => Kind::Do,
-        "elete" => Kind::Delete,
-        "eclare" => Kind::Declare,
-        "efault" => Kind::Default,
-        "ebugger" => Kind::Debugger,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_E(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "lse" => Kind::Else,
-        "num" => Kind::Enum,
-        "xport" => Kind::Export,
-        "xtends" => Kind::Extends,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_F(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "unction" => Kind::Function,
-        "alse" => Kind::False,
-        "or" => Kind::For,
-        "inally" => Kind::Finally,
-        "rom" => Kind::From,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_G(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Get,
-        "lobal" => Kind::Global,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_I(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "f" => Kind::If,
-        "nstanceof" => Kind::Instanceof,
-        "n" => Kind::In,
-        "mplements" => Kind::Implements,
-        "mport" => Kind::Import,
-        "nfer" => Kind::Infer,
-        "nterface" => Kind::Interface,
-        "ntrinsic" => Kind::Intrinsic,
-        "s" => Kind::Is,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_K(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "eyof" => Kind::KeyOf,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_L(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Let,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_M(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "eta" => Kind::Meta,
-        "odule" => Kind::Module,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_N(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "ull" => Kind::Null,
-        "ew" => Kind::New,
-        "umber" => Kind::Number,
-        "amespace" => Kind::Namespace,
-        "ever" => Kind::Never,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_O(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "f" => Kind::Of,
-        "bject" => Kind::Object,
-        "ut" => Kind::Out,
-        "verride" => Kind::Override,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_P(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "ackage" => Kind::Package,
-        "rivate" => Kind::Private,
-        "rotected" => Kind::Protected,
-        "ublic" => Kind::Public,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_R(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "eturn" => Kind::Return,
-        "equire" => Kind::Require,
-        "eadonly" => Kind::Readonly,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_S(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "et" => Kind::Set,
-        "uper" => Kind::Super,
-        "witch" => Kind::Switch,
-        "tatic" => Kind::Static,
-        "ymbol" => Kind::Symbol,
-        "tring" => Kind::String,
-        "atisfies" => Kind::Satisfies,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_T(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "his" => Kind::This,
-        "rue" => Kind::True,
-        "hrow" => Kind::Throw,
-        "ry" => Kind::Try,
-        "ypeof" => Kind::Typeof,
-        "arget" => Kind::Target,
-        "ype" => Kind::Type,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_U(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "ndefined" => Kind::Undefined,
-        "sing" => Kind::Using,
-        "nique" => Kind::Unique,
-        "nknown" => Kind::Unknown,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_V(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "ar" => Kind::Var,
-        "oid" => Kind::Void,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_W(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "hile" => Kind::While,
-        "ith" => Kind::With,
-        _ => Kind::Ident,
-    }
-}
-
-fn L_Y(lexer: &mut Lexer) -> Kind {
-    match &lexer.identifier_name_handler()[1..] {
-        "ield" => Kind::Yield,
-        _ => Kind::Ident,
+        b'(' => {
+            lexer.consume_ascii_char();
+            Kind::LParen
+        }
+        b')' => {
+            lexer.consume_ascii_char();
+            Kind::RParen
+        }
+        b'*' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('*') {
+                if lexer.next_eq('=') {
+                    Kind::Star2Eq
+                } else {
+                    Kind::Star2
+                }
+            } else if lexer.next_eq('=') {
+                Kind::StarEq
+            } else {
+                Kind::Star
+            }
+        }
+        b'+' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('+') {
+                Kind::Plus2
+            } else if lexer.next_eq('=') {
+                Kind::PlusEq
+            } else {
+                Kind::Plus
+            }
+        }
+        b',' => {
+            lexer.consume_ascii_char();
+            Kind::Comma
+        }
+        b'-' => {
+            lexer.consume_ascii_char();
+            lexer.read_minus().unwrap_or_else(|| lexer.skip_single_line_comment())
+        }
+        b'.' => {
+            lexer.consume_ascii_char();
+            lexer.read_dot()
+        }
+        b'/' => {
+            lexer.consume_ascii_char();
+            match lexer.peek() {
+                Some('/') => {
+                    lexer.current.chars.next();
+                    lexer.skip_single_line_comment()
+                }
+                Some('*') => {
+                    lexer.current.chars.next();
+                    lexer.skip_multi_line_comment()
+                }
+                _ => {
+                    // regex is handled separately, see `next_regex`
+                    if lexer.next_eq('=') {
+                        Kind::SlashEq
+                    } else {
+                        Kind::Slash
+                    }
+                }
+            }
+        }
+        b'0' => {
+            lexer.consume_ascii_char();
+            lexer.read_zero()
+        }
+        b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => {
+            lexer.consume_ascii_char();
+            lexer.decimal_literal_after_first_digit()
+        }
+        b':' => {
+            lexer.consume_ascii_char();
+            Kind::Colon
+        }
+        b';' => {
+            lexer.consume_ascii_char();
+            Kind::Semicolon
+        }
+        b'<' => {
+            lexer.consume_ascii_char();
+            lexer.read_left_angle().unwrap_or_else(|| lexer.skip_single_line_comment())
+        }
+        b'=' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('=') {
+                if lexer.next_eq('=') {
+                    Kind::Eq3
+                } else {
+                    Kind::Eq2
+                }
+            } else if lexer.next_eq('>') {
+                Kind::Arrow
+            } else {
+                Kind::Eq
+            }
+        }
+        b'>' => {
+            lexer.consume_ascii_char();
+            // `>=` is re-lexed with [Lexer::next_jsx_child]
+            Kind::RAngle
+        }
+        b'?' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('?') {
+                if lexer.next_eq('=') {
+                    Kind::Question2Eq
+                } else {
+                    Kind::Question2
+                }
+            } else if lexer.peek() == Some('.') {
+                // parse `?.1` as `?` `.1`
+                if lexer.peek2().is_some_and(|c| c.is_ascii_digit()) {
+                    Kind::Question
+                } else {
+                    lexer.current.chars.next();
+                    Kind::QuestionDot
+                }
+            } else {
+                Kind::Question
+            }
+        }
+        b'@' => {
+            lexer.consume_ascii_char();
+            Kind::At
+        }
+        b'A' | b'B' | b'C' | b'D' | b'E' | b'F' | b'G' | b'H' | b'I' | b'J' | b'K' | b'L'
+        | b'M' | b'N' | b'O' | b'P' | b'Q' | b'R' | b'S' | b'T' | b'U' | b'V' | b'W' | b'X'
+        | b'Y' | b'Z' | b'h' | b'j' | b'q' | b'x' | b'z' | b'_' | b'$' => {
+            lexer.identifier_name_handler();
+            Kind::Ident
+        }
+        b'[' => {
+            lexer.consume_ascii_char();
+            Kind::LBrack
+        }
+        b'\\' => {
+            let mut builder = AutoCow::new(lexer);
+            lexer.consume_ascii_char();
+            builder.force_allocation_without_current_ascii_char(lexer);
+            lexer.identifier_unicode_escape_sequence(&mut builder, true);
+            let text = lexer.identifier_name(builder);
+            Kind::match_keyword(text)
+        }
+        b']' => {
+            lexer.consume_ascii_char();
+            Kind::RBrack
+        }
+        b'^' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('=') {
+                Kind::CaretEq
+            } else {
+                Kind::Caret
+            }
+        }
+        b'`' => {
+            lexer.consume_ascii_char();
+            lexer.read_template_literal(Kind::TemplateHead, Kind::NoSubstitutionTemplate)
+        }
+        b'a' => match &lexer.identifier_name_handler()[1..] {
+            "wait" => Kind::Await,
+            "sync" => Kind::Async,
+            "bstract" => Kind::Abstract,
+            "ccessor" => Kind::Accessor,
+            "ny" => Kind::Any,
+            "s" => Kind::As,
+            "ssert" => Kind::Assert,
+            "sserts" => Kind::Asserts,
+            _ => Kind::Ident,
+        },
+        b'b' => match &lexer.identifier_name_handler()[1..] {
+            "reak" => Kind::Break,
+            "oolean" => Kind::Boolean,
+            "igint" => Kind::BigInt,
+            _ => Kind::Ident,
+        },
+        b'c' => match &lexer.identifier_name_handler()[1..] {
+            "onst" => Kind::Const,
+            "lass" => Kind::Class,
+            "ontinue" => Kind::Continue,
+            "atch" => Kind::Catch,
+            "ase" => Kind::Case,
+            "onstructor" => Kind::Constructor,
+            _ => Kind::Ident,
+        },
+        b'd' => match &lexer.identifier_name_handler()[1..] {
+            "o" => Kind::Do,
+            "elete" => Kind::Delete,
+            "eclare" => Kind::Declare,
+            "efault" => Kind::Default,
+            "ebugger" => Kind::Debugger,
+            _ => Kind::Ident,
+        },
+        b'e' => match &lexer.identifier_name_handler()[1..] {
+            "lse" => Kind::Else,
+            "num" => Kind::Enum,
+            "xport" => Kind::Export,
+            "xtends" => Kind::Extends,
+            _ => Kind::Ident,
+        },
+        b'f' => match &lexer.identifier_name_handler()[1..] {
+            "unction" => Kind::Function,
+            "alse" => Kind::False,
+            "or" => Kind::For,
+            "inally" => Kind::Finally,
+            "rom" => Kind::From,
+            _ => Kind::Ident,
+        },
+        b'g' => match &lexer.identifier_name_handler()[1..] {
+            "et" => Kind::Get,
+            "lobal" => Kind::Global,
+            _ => Kind::Ident,
+        },
+        b'i' => match &lexer.identifier_name_handler()[1..] {
+            "f" => Kind::If,
+            "nstanceof" => Kind::Instanceof,
+            "n" => Kind::In,
+            "mplements" => Kind::Implements,
+            "mport" => Kind::Import,
+            "nfer" => Kind::Infer,
+            "nterface" => Kind::Interface,
+            "ntrinsic" => Kind::Intrinsic,
+            "s" => Kind::Is,
+            _ => Kind::Ident,
+        },
+        b'k' => match &lexer.identifier_name_handler()[1..] {
+            "eyof" => Kind::KeyOf,
+            _ => Kind::Ident,
+        },
+        b'l' => match &lexer.identifier_name_handler()[1..] {
+            "et" => Kind::Let,
+            _ => Kind::Ident,
+        },
+        b'm' => match &lexer.identifier_name_handler()[1..] {
+            "eta" => Kind::Meta,
+            "odule" => Kind::Module,
+            _ => Kind::Ident,
+        },
+        b'n' => match &lexer.identifier_name_handler()[1..] {
+            "ull" => Kind::Null,
+            "ew" => Kind::New,
+            "umber" => Kind::Number,
+            "amespace" => Kind::Namespace,
+            "ever" => Kind::Never,
+            _ => Kind::Ident,
+        },
+        b'o' => match &lexer.identifier_name_handler()[1..] {
+            "f" => Kind::Of,
+            "bject" => Kind::Object,
+            "ut" => Kind::Out,
+            "verride" => Kind::Override,
+            _ => Kind::Ident,
+        },
+        b'p' => match &lexer.identifier_name_handler()[1..] {
+            "ackage" => Kind::Package,
+            "rivate" => Kind::Private,
+            "rotected" => Kind::Protected,
+            "ublic" => Kind::Public,
+            _ => Kind::Ident,
+        },
+        b'r' => match &lexer.identifier_name_handler()[1..] {
+            "eturn" => Kind::Return,
+            "equire" => Kind::Require,
+            "eadonly" => Kind::Readonly,
+            _ => Kind::Ident,
+        },
+        b's' => match &lexer.identifier_name_handler()[1..] {
+            "et" => Kind::Set,
+            "uper" => Kind::Super,
+            "witch" => Kind::Switch,
+            "tatic" => Kind::Static,
+            "ymbol" => Kind::Symbol,
+            "tring" => Kind::String,
+            "atisfies" => Kind::Satisfies,
+            _ => Kind::Ident,
+        },
+        b't' => match &lexer.identifier_name_handler()[1..] {
+            "his" => Kind::This,
+            "rue" => Kind::True,
+            "hrow" => Kind::Throw,
+            "ry" => Kind::Try,
+            "ypeof" => Kind::Typeof,
+            "arget" => Kind::Target,
+            "ype" => Kind::Type,
+            _ => Kind::Ident,
+        },
+        b'u' => match &lexer.identifier_name_handler()[1..] {
+            "ndefined" => Kind::Undefined,
+            "sing" => Kind::Using,
+            "nique" => Kind::Unique,
+            "nknown" => Kind::Unknown,
+            _ => Kind::Ident,
+        },
+        b'v' => match &lexer.identifier_name_handler()[1..] {
+            "ar" => Kind::Var,
+            "oid" => Kind::Void,
+            _ => Kind::Ident,
+        },
+        b'w' => match &lexer.identifier_name_handler()[1..] {
+            "hile" => Kind::While,
+            "ith" => Kind::With,
+            _ => Kind::Ident,
+        },
+        b'y' => match &lexer.identifier_name_handler()[1..] {
+            "ield" => Kind::Yield,
+            _ => Kind::Ident,
+        },
+        b'{' => {
+            lexer.consume_ascii_char();
+            Kind::LCurly
+        }
+        b'|' => {
+            lexer.consume_ascii_char();
+            if lexer.next_eq('|') {
+                if lexer.next_eq('=') {
+                    Kind::Pipe2Eq
+                } else {
+                    Kind::Pipe2
+                }
+            } else if lexer.next_eq('=') {
+                Kind::PipeEq
+            } else {
+                Kind::Pipe
+            }
+        }
+        b'}' => {
+            lexer.consume_ascii_char();
+            Kind::RCurly
+        }
+        b'~' => {
+            lexer.consume_ascii_char();
+            Kind::Tilde
+        }
+        _ => lexer.unicode_char_handler(),
     }
 }
