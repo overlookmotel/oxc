@@ -1,0 +1,28 @@
+[package]
+name                   = "oxc_atom"
+version                = "0.5.0"
+publish                = true
+authors.workspace      = true
+description.workspace  = true
+edition.workspace      = true
+homepage.workspace     = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
+rust-version.workspace = true
+categories.workspace   = true
+
+[lints]
+workspace = true
+
+[lib]
+doctest = false
+
+[features]
+default = []
+serde   = ["dep:serde"]
+
+[dependencies]
+oxc_allocator = { workspace = true }
+
+serde = { workspace = true, optional = true }

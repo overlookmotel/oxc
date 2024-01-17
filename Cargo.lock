@@ -1340,6 +1340,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxc_atom"
+version = "0.5.0"
+dependencies = [
+ "oxc_allocator",
+ "serde",
+]
+
+[[package]]
 name = "oxc_benchmark"
 version = "0.0.0"
 dependencies = [
