@@ -44,45 +44,61 @@ impl Atom<'static> {
     }
 }
 
+const BASE64_CHARS_AND_NULL: &[u8; 65] =
+    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_0123456789\0";
+const NULL_INDEX: u8 = BASE64_CHARS_AND_NULL.len() as u8 - 1;
+
 impl Atom<'static> {
     /// Get the shortest mangled name for a given n.
     /// Code adapted from [terser](https://github.com/terser/terser/blob/8b966d687395ab493d2c6286cc9dd38650324c11/lib/scope.js#L1041-L1051).
+    // TODO: Limit `n` to `u32::MAX`. Not feasable to have more than 4 billion bindings in an AST!
     // TODO: This is meant to be a faster version, but benchmark it to see if it actually is.
     // I don't even know if this is a hot path, so whether it's worthwhile optimizing.
     #[doc(hidden)]
     pub fn base54_faster(n: usize) -> Self {
-        let mut num = n;
-        let mut bytes = [0u8; MAX_LEN_INLINE];
+        let bytes = if n < 54 {
+            // Fast path for low values of `n`
+            let mut bytes = [0u8; MAX_LEN_INLINE];
+            bytes[0] = BASE64_CHARS_AND_NULL[n];
+            bytes[MAX_LEN_INLINE - 1] = 1 | INLINE_FLAG;
+            bytes
+        } else {
+            // Initial values are index of 0 byte in `BASE64_CHARS_AND_NULL` so any indexes
+            // which aren't altered later are translated to 0 when converted to bytes.
+            // TODO: If `BASE64_CHARS_AND_NULL` not fitting into a single L1 cache line is slower,
+            // could drop `9` from possible characters used. This would be at cost of losing 54 possible
+            // 2-byte identifiers, but that only applies if `n` >= 3456.
+            let mut indexes = [NULL_INDEX; MAX_LEN_INLINE];
+            indexes[0] = (n % 54) as u8;
+            let mut num = n / 54 - 1;
 
-        // Base 54 at first because these are the usable first characters in JavaScript identifiers
-        // <https://tc39.es/ecma262/#prod-IdentifierStart>
-        let base = 54usize;
-        bytes[0] = (num % base) as u8;
-        num /= base;
-
-        // Base 64 for the rest because after the first character we can also use 0-9 too
-        // <https://tc39.es/ecma262/#prod-IdentifierPart>
-        let mut len = 1;
-        while num > 0 {
-            num -= 1;
-            unsafe {
-                *bytes.get_unchecked_mut(len) = (num & 63) as u8;
+            let mut len = 1;
+            loop {
+                if num < 64 {
+                    // SAFETY: It's not possible for `len` to reach `MAX_LEN_INLINE`
+                    unsafe { *indexes.get_unchecked_mut(len) = num as u8 };
+                    len += 1;
+                    break;
+                }
+                // SAFETY: It's not possible for `len` to reach `MAX_LEN_INLINE`
+                unsafe { *indexes.get_unchecked_mut(len) = (num % 64) as u8 };
+                num = num / 64 - 1;
+                len += 1;
             }
-            num >>= 6; // num /= 64
-            len += 1;
-        }
 
-        // Separate loop with static iteration count to create a single SIMD instruction
-        // to look up all chars in one go
-        for i in 0..MAX_LEN_INLINE {
-            // SAFETY: We know `bytes[i]` is always in bounds for the bytes we filled in,
-            // and initial values are 0, so they're in bounds too
-            bytes[i] = unsafe { *BASE54_CHARS.get_unchecked(bytes[i] as usize) };
-        }
+            // Separate loop with static iteration count to create a single SIMD instruction
+            // to look up all chars in one go
+            let mut bytes = [0u8; MAX_LEN_INLINE];
+            for i in 0..MAX_LEN_INLINE {
+                // SAFETY: We know `indexes[i]` is always in bounds for the values we filled in,
+                // and initial values are 64, so they're in bounds too
+                bytes[i] = unsafe { *BASE64_CHARS_AND_NULL.get_unchecked(indexes[i] as usize) };
+            }
 
-        // String can't fill whole buffer, so no need to check if over-writing last byte
-        const LAST_BYTE_INDEX: usize = MAX_LEN_INLINE - 1;
-        bytes[LAST_BYTE_INDEX] = len as u8 | INLINE_FLAG;
+            // String can't fill whole buffer, so no need to check if over-writing last byte
+            bytes[MAX_LEN_INLINE - 1] = len as u8 | INLINE_FLAG;
+            bytes
+        };
 
         // SAFETY: We've created a [u8; MAX_LEN_INLINE] which represents a valid inline `Atom`
         unsafe { std::mem::transmute(bytes) }
