@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use oxc_index::assert_eq_size;
 
 /// [`NonMaxU8`] is an unsigned 8-bit integer data type that has a valid range of `[0, 254]`.
 /// Excluding `255` allows the Rust compiler to use `255` as a niche.
@@ -268,5 +268,5 @@ pub enum NonMaxU8 {
     V254 = 254,
 }
 
-const _: () = assert!(size_of::<NonMaxU8>() == size_of::<u8>());
-const _: () = assert!(size_of::<NonMaxU8>() == size_of::<Option<NonMaxU8>>());
+assert_eq_size!(NonMaxU8, u8);
+assert_eq_size!(NonMaxU8, Option<NonMaxU8>);

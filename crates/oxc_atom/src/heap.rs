@@ -1,8 +1,8 @@
-use std::mem::size_of;
+use oxc_index::assert_eq_size;
 
 use super::{Atom, HEAP_FLAG_USIZE, MAX_LEN, MAX_LEN_INLINE};
 
-const USIZE_SIZE: usize = size_of::<usize>();
+const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 
 #[repr(C)]
 pub struct HeapBuffer {
@@ -15,7 +15,7 @@ pub struct HeapBuffer {
     pub len: [u8; USIZE_SIZE],
 }
 
-const _: () = assert!(size_of::<HeapBuffer>() == size_of::<Atom>());
+assert_eq_size!(HeapBuffer, Atom);
 
 impl HeapBuffer {
     /// Construct a new [`HeapBuffer`].

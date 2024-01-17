@@ -1344,6 +1344,7 @@ name = "oxc_atom"
 version = "0.5.0"
 dependencies = [
  "oxc_allocator",
+ "oxc_index",
  "serde",
 ]
 

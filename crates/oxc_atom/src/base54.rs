@@ -1,4 +1,5 @@
 use crate::{Atom, INLINE_FLAG, MAX_LEN_INLINE};
+use oxc_index::const_assert;
 
 const BASE54_CHARS: &[u8; 64] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_0123456789";
 
@@ -9,7 +10,7 @@ const MAX_MANGLED_LEN: usize = match std::mem::size_of::<usize>() {
     4 => 6,
     _ => panic!("Unsupported pointer width"),
 };
-const _: () = assert!(MAX_MANGLED_LEN <= MAX_LEN_INLINE);
+const_assert!(MAX_MANGLED_LEN <= MAX_LEN_INLINE);
 
 impl Atom<'static> {
     /// Get the shortest mangled name for a given n.
@@ -47,6 +48,8 @@ impl Atom<'static> {
 const BASE64_CHARS_AND_NULL: &[u8; 65] =
     b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_0123456789\0";
 const NULL_INDEX: u8 = BASE64_CHARS_AND_NULL.len() as u8 - 1;
+
+const_assert!(MAX_MANGLED_LEN < MAX_LEN_INLINE);
 
 impl Atom<'static> {
     /// Get the shortest mangled name for a given n.

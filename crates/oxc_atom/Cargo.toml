@@ -24,5 +24,6 @@ serde   = ["dep:serde"]
 
 [dependencies]
 oxc_allocator = { workspace = true }
+oxc_index     = { workspace = true }
 
 serde = { workspace = true, optional = true }

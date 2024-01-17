@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use oxc_index::assert_eq_size;
 
 use super::{Atom, INLINE_FLAG, MAX_LEN_INLINE};
 
@@ -6,7 +6,7 @@ use super::{Atom, INLINE_FLAG, MAX_LEN_INLINE};
 #[repr(transparent)]
 pub struct InlineBuffer(pub [u8; MAX_LEN_INLINE]);
 
-const _: () = assert!(size_of::<InlineBuffer>() == size_of::<Atom>());
+assert_eq_size!(InlineBuffer, Atom);
 
 impl InlineBuffer {
     /// Construct a new [`InlineBuffer`]. A short string stored inline.

@@ -127,6 +127,7 @@ use std::{
 };
 
 use oxc_allocator::Allocator;
+use oxc_index::{assert_eq_size, const_assert};
 
 mod base54;
 mod heap;
@@ -139,13 +140,13 @@ use nonmax::NonMaxU8;
 
 // Implementation depends on 64-bit or 32-bit pointers
 const USIZE_SIZE: usize = size_of::<usize>();
-const _: () = assert!(USIZE_SIZE == 8 || USIZE_SIZE == 4, "Unsupported pointer width");
+const_assert!(USIZE_SIZE == 8 || USIZE_SIZE == 4);
 
 /// Max length of a string [`Atom`] can store inline.
 ///
 /// 16 bytes on 64-bit systems, 8 bytes on 32-bit systems.
 pub const MAX_LEN_INLINE: usize = size_of::<Atom>();
-const _: () = assert!(MAX_LEN_INLINE == USIZE_SIZE * 2);
+const_assert!(MAX_LEN_INLINE == USIZE_SIZE * 2);
 
 // Flags for heap or inline are contained in top 3 bits of last byte
 const FLAG_MASK: u8 = 0b11100000;
@@ -167,18 +168,17 @@ const FLAG_MASK: u8 = 0b11100000;
 pub const MAX_LEN: usize = usize::MAX >> 3;
 
 // Check `MAX_LEN` does not overlap flag bits, and is as large as it can be without overlapping
-const _: () = {
-    const FLAG_MASK_USIZE: usize = (FLAG_MASK as usize) << ((USIZE_SIZE - 1) * 8);
-    assert!(MAX_LEN & FLAG_MASK_USIZE == 0);
-    assert!((MAX_LEN + 1) & FLAG_MASK_USIZE != 0);
-};
+#[allow(dead_code)]
+const FLAG_MASK_USIZE: usize = (FLAG_MASK as usize) << ((USIZE_SIZE - 1) * 8);
+const_assert!(MAX_LEN & FLAG_MASK_USIZE == 0);
+const_assert!((MAX_LEN + 1) & FLAG_MASK_USIZE != 0);
 
 /// When string is stored inline, length of string is stored last byte, offset by `INLINE_FLAG`
 /// i.e. 0b111xxxxx where xxxxx is the length of string.
 /// Inline length is max 16 on 64-bit systems (8 on 32-bit systems) so `length | INLINE_FLAG`
 /// cannot be 255 (that would require length of 31). 255 is reserved as niche value.
 pub(crate) const INLINE_FLAG: u8 = FLAG_MASK;
-const _: () = assert!((MAX_LEN_INLINE | (INLINE_FLAG as usize)) < 255);
+const_assert!((MAX_LEN_INLINE | (INLINE_FLAG as usize)) < 255);
 
 /// When string is stored out of line, last byte is 0b110xxxxx,
 /// where xxxxx is top 5 bits of string length.
@@ -187,8 +187,8 @@ const HEAP_FLAG: u8 = 0b11000000;
 pub(crate) const HEAP_FLAG_USIZE: usize = (HEAP_FLAG as usize) << ((USIZE_SIZE - 1) * 8);
 
 // Check assumptions about pointer sizes
-const _: () = assert!(size_of::<*const ()>() == size_of::<usize>());
-const _: () = assert!(size_of::<*const u8>() == size_of::<usize>());
+assert_eq_size!(*const (), usize);
+assert_eq_size!(*const u8, usize);
 
 // TODO: Implement `Hash`
 // TODO: Implement `serde::Serialize`
@@ -431,7 +431,7 @@ impl<'alloc> Atom<'alloc> {
         // If an inline string has `MAX_LEN_INLINE` bytes length, last byte will be < 192,
         // so `.wrapping_sub(INLINE_FLAG)` will wrap, resulting in a value > MAX_LEN_INLINE,
         // and `min()` will bring it down to `MAX_LEN_INLINE`.
-        const _: () = assert!(0u8.wrapping_sub(INLINE_FLAG) as usize > MAX_LEN_INLINE);
+        const_assert!(0u8.wrapping_sub(INLINE_FLAG) as usize > MAX_LEN_INLINE);
 
         min((self.last_byte()).wrapping_sub(INLINE_FLAG) as usize, MAX_LEN_INLINE)
     }
