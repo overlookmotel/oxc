@@ -299,6 +299,17 @@ impl<'a> Lexer<'a> {
         chars.next()
     }
 
+    /// Peek the next byte without advancing the position
+    #[inline]
+    fn peek_byte(&self) -> Option<u8> {
+        let remaining = self.current.chars.as_str();
+        if remaining.is_empty() {
+            None
+        } else {
+            Some(remaining.as_bytes()[0])
+        }
+    }
+
     /// Peek the next character, and advance the current position if it matches
     #[inline]
     fn next_eq(&mut self, c: char) -> bool {
@@ -512,12 +523,12 @@ impl<'a> Lexer<'a> {
 
     /// Section 12.8 Punctuators
     fn read_dot(&mut self) -> Kind {
-        if self.peek() == Some('.') && self.peek2() == Some('.') {
+        if self.peek_byte() == Some(b'.') && self.peek2() == Some('.') {
             self.current.chars.next();
             self.current.chars.next();
             return Kind::Dot3;
         }
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek_byte().is_some_and(|b| b.is_ascii_digit()) {
             self.decimal_literal_after_decimal_point()
         } else {
             Kind::Dot
@@ -534,7 +545,7 @@ impl<'a> Lexer<'a> {
             }
         } else if self.next_eq('=') {
             Some(Kind::LtEq)
-        } else if self.peek() == Some('!')
+        } else if self.peek_byte() == Some(b'!')
             // SingleLineHTMLOpenComment `<!--` in script mode
             && self.source_type.is_script()
             && self.remaining().starts_with("!--")
@@ -614,23 +625,23 @@ impl<'a> Lexer<'a> {
 
     /// 12.9.3 Numeric Literals with `0` prefix
     fn read_zero(&mut self) -> Kind {
-        match self.peek() {
-            Some('b' | 'B') => self.read_non_decimal(Kind::Binary),
-            Some('o' | 'O') => self.read_non_decimal(Kind::Octal),
-            Some('x' | 'X') => self.read_non_decimal(Kind::Hex),
-            Some('e' | 'E') => {
+        match self.peek_byte() {
+            Some(b'b' | b'B') => self.read_non_decimal(Kind::Binary),
+            Some(b'o' | b'O') => self.read_non_decimal(Kind::Octal),
+            Some(b'x' | b'X') => self.read_non_decimal(Kind::Hex),
+            Some(b'e' | b'E') => {
                 self.current.chars.next();
                 self.read_decimal_exponent()
             }
-            Some('.') => {
+            Some(b'.') => {
                 self.current.chars.next();
                 self.decimal_literal_after_decimal_point_after_digits()
             }
-            Some('n') => {
+            Some(b'n') => {
                 self.current.chars.next();
                 self.check_after_numeric_literal(Kind::Decimal)
             }
-            Some(n) if n.is_ascii_digit() => self.read_legacy_octal(),
+            Some(b) if b.is_ascii_digit() => self.read_legacy_octal(),
             _ => self.check_after_numeric_literal(Kind::Decimal),
         }
     }
@@ -638,31 +649,31 @@ impl<'a> Lexer<'a> {
     fn read_non_decimal(&mut self, kind: Kind) -> Kind {
         self.current.chars.next();
 
-        if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
+        if self.peek_byte().is_some_and(|b| kind.matches_number_byte(b)) {
             self.current.chars.next();
         } else {
             self.unexpected_err();
             return Kind::Undetermined;
         }
 
-        while let Some(c) = self.peek() {
-            match c {
-                '_' => {
+        while let Some(b) = self.peek_byte() {
+            match b {
+                b'_' => {
                     self.current.chars.next();
-                    if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
+                    if self.peek_byte().is_some_and(|b| kind.matches_number_byte(b)) {
                         self.current.chars.next();
                     } else {
                         self.unexpected_err();
                         return Kind::Undetermined;
                     }
                 }
-                c if kind.matches_number_char(c) => {
+                b if kind.matches_number_byte(b) => {
                     self.current.chars.next();
                 }
                 _ => break,
             }
         }
-        if self.peek() == Some('n') {
+        if self.peek_byte() == Some(b'n') {
             self.current.chars.next();
         }
         self.check_after_numeric_literal(kind)
@@ -671,11 +682,11 @@ impl<'a> Lexer<'a> {
     fn read_legacy_octal(&mut self) -> Kind {
         let mut kind = Kind::Octal;
         loop {
-            match self.peek() {
-                Some('0'..='7') => {
+            match self.peek_byte() {
+                Some(b'0'..=b'7') => {
                     self.current.chars.next();
                 }
-                Some('8'..='9') => {
+                Some(b'8'..=b'9') => {
                     self.current.chars.next();
                     kind = Kind::Decimal;
                 }
@@ -683,14 +694,14 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        match self.peek() {
+        match self.peek_byte() {
             // allow 08.5 and 09.5
-            Some('.') if kind == Kind::Decimal => {
+            Some(b'.') if kind == Kind::Decimal => {
                 self.current.chars.next();
                 self.decimal_literal_after_decimal_point_after_digits()
             }
             // allow 08e1 and 09e1
-            Some('e') if kind == Kind::Decimal => {
+            Some(b'e') if kind == Kind::Decimal => {
                 self.current.chars.next();
                 self.read_decimal_exponent()
             }
@@ -711,12 +722,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_decimal_exponent(&mut self) -> Kind {
-        let kind = match self.peek() {
-            Some('-') => {
+        let kind = match self.peek_byte() {
+            Some(b'-') => {
                 self.current.chars.next();
                 Kind::NegativeExponential
             }
-            Some('+') => {
+            Some(b'+') => {
                 self.current.chars.next();
                 Kind::PositiveExponential
             }
@@ -727,7 +738,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_decimal_digits(&mut self) {
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek_byte().is_some_and(|b| b.is_ascii_digit()) {
             self.current.chars.next();
         } else {
             self.unexpected_err();
@@ -738,18 +749,18 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_decimal_digits_after_first_digit(&mut self) {
-        while let Some(c) = self.peek() {
-            match c {
-                '_' => {
+        while let Some(b) = self.peek_byte() {
+            match b {
+                b'_' => {
                     self.current.chars.next();
-                    if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                    if self.peek_byte().is_some_and(|b| b.is_ascii_digit()) {
                         self.current.chars.next();
                     } else {
                         self.unexpected_err();
                         return;
                     }
                 }
-                '0'..='9' => {
+                b'0'..=b'9' => {
                     self.current.chars.next();
                 }
                 _ => break,
@@ -770,7 +781,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn optional_decimal_digits(&mut self) {
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek_byte().is_some_and(|b| b.is_ascii_digit()) {
             self.current.chars.next();
         } else {
             return;
@@ -779,7 +790,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn optional_exponent(&mut self) -> Option<Kind> {
-        if matches!(self.peek(), Some('e' | 'E')) {
+        if matches!(self.peek_byte(), Some(b'e' | b'E')) {
             self.current.chars.next();
             return Some(self.read_decimal_exponent());
         }
@@ -873,16 +884,18 @@ impl<'a> Lexer<'a> {
         let pattern_end = self.offset() - 1; // -1 to exclude `/`
         let mut flags = RegExpFlags::empty();
 
-        while let Some(ch @ ('$' | '_' | 'a'..='z' | 'A'..='Z' | '0'..='9')) = self.peek() {
+        while let Some(b @ (b'$' | b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) =
+            self.peek_byte()
+        {
             self.current.chars.next();
-            let flag = if let Ok(flag) = RegExpFlags::try_from(ch) {
+            let flag = if let Ok(flag) = RegExpFlags::try_from(b) {
                 flag
             } else {
-                self.error(diagnostics::RegExpFlag(ch, self.current_offset()));
+                self.error(diagnostics::RegExpFlag(b as char, self.current_offset()));
                 continue;
             };
             if flags.contains(flag) {
-                self.error(diagnostics::RegExpFlagTwice(ch, self.current_offset()));
+                self.error(diagnostics::RegExpFlagTwice(b as char, self.current_offset()));
                 continue;
             }
             flags |= flag;
@@ -897,7 +910,7 @@ impl<'a> Lexer<'a> {
         let mut is_valid_escape_sequence = true;
         while let Some(c) = self.current.chars.next() {
             match c {
-                '$' if self.peek() == Some('{') => {
+                '$' if self.peek_byte() == Some(b'{') => {
                     self.save_template_string(
                         is_valid_escape_sequence,
                         builder.has_escape(),
@@ -975,7 +988,7 @@ impl<'a> Lexer<'a> {
                 loop {
                     // `>` and `}` are errors in TypeScript but not Babel
                     // let's make this less strict so we can parse more code
-                    if matches!(self.peek(), Some('{' | '<')) {
+                    if matches!(self.peek_byte(), Some(b'{' | b'<')) {
                         break;
                     }
                     if let Some(c) = self.current.chars.next() {
@@ -1039,8 +1052,8 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        let value = match self.peek() {
-            Some('{') => self.unicode_code_point(),
+        let value = match self.peek_byte() {
+            Some(b'{') => self.unicode_code_point(),
             _ => self.surrogate_pair(),
         };
 
@@ -1091,8 +1104,8 @@ impl<'a> Lexer<'a> {
         text: &mut String<'a>,
         is_valid_escape_sequence: &mut bool,
     ) {
-        let value = match self.peek() {
-            Some('{') => self.unicode_code_point(),
+        let value = match self.peek_byte() {
+            Some(b'{') => self.unicode_code_point(),
             _ => self.surrogate_pair(),
         };
 
@@ -1142,10 +1155,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn hex_digit(&mut self) -> Option<u32> {
-        let value = match self.peek() {
-            Some(c @ '0'..='9') => c as u32 - '0' as u32,
-            Some(c @ 'a'..='f') => 10 + (c as u32 - 'a' as u32),
-            Some(c @ 'A'..='F') => 10 + (c as u32 - 'A' as u32),
+        #[allow(clippy::cast_lossless)]
+        let value = match self.peek_byte() {
+            Some(b @ b'0'..=b'9') => b as u32 - '0' as u32,
+            Some(b @ b'a'..=b'f') => 10 + (b as u32 - 'a' as u32),
+            Some(b @ b'A'..=b'F') => 10 + (b as u32 - 'A' as u32),
             _ => return None,
         };
         self.current.chars.next();
@@ -1171,7 +1185,7 @@ impl<'a> Lexer<'a> {
         let high = self.hex_4_digits()?;
         // The first code unit of a surrogate pair is always in the range from 0xD800 to 0xDBFF, and is called a high surrogate or a lead surrogate.
         if !((0xD800..=0xDBFF).contains(&high)
-            && self.peek() == Some('\\')
+            && self.peek_byte() == Some(b'\\')
             && self.peek2() == Some('u'))
         {
             return Some(SurrogatePair::CodePoint(high));
@@ -1248,7 +1262,7 @@ impl<'a> Lexer<'a> {
                     self.string_unicode_escape_sequence(text, is_valid_escape_sequence);
                 }
                 // 0 [lookahead ∉ DecimalDigit]
-                '0' if !self.peek().is_some_and(|c| c.is_ascii_digit()) => text.push('\0'),
+                '0' if !self.peek_byte().is_some_and(|b| b.is_ascii_digit()) => text.push('\0'),
                 // Section 12.9.4 String Literals
                 // LegacyOctalEscapeSequence
                 // NonOctalDecimalEscapeSequence
@@ -1257,16 +1271,16 @@ impl<'a> Lexer<'a> {
                     num.push(a);
                     match a {
                         '4'..='7' => {
-                            if matches!(self.peek(), Some('0'..='7')) {
+                            if matches!(self.peek_byte(), Some(b'0'..=b'7')) {
                                 let b = self.consume_char();
                                 num.push(b);
                             }
                         }
                         '0'..='3' => {
-                            if matches!(self.peek(), Some('0'..='7')) {
+                            if matches!(self.peek_byte(), Some(b'0'..=b'7')) {
                                 let b = self.consume_char();
                                 num.push(b);
-                                if matches!(self.peek(), Some('0'..='7')) {
+                                if matches!(self.peek_byte(), Some(b'0'..=b'7')) {
                                     let c = self.consume_char();
                                     num.push(c);
                                 }
@@ -1279,7 +1293,7 @@ impl<'a> Lexer<'a> {
                         char::from_u32(u32::from_str_radix(num.as_str(), 8).unwrap()).unwrap();
                     text.push(value);
                 }
-                '0' if in_template && self.peek().is_some_and(|c| c.is_ascii_digit()) => {
+                '0' if in_template && self.peek_byte().is_some_and(|b| b.is_ascii_digit()) => {
                     self.current.chars.next();
                     // error raised within the parser by `diagnostics::TemplateLiteral`
                     *is_valid_escape_sequence = false;
@@ -1496,12 +1510,12 @@ const PRD: ByteHandler = |lexer| {
 const SLH: ByteHandler = |lexer| {
     // Next char is `/`, which is ASCII
     lexer.consume_ascii_char();
-    match lexer.peek() {
-        Some('/') => {
+    match lexer.peek_byte() {
+        Some(b'/') => {
             lexer.current.chars.next();
             lexer.skip_single_line_comment()
         }
-        Some('*') => {
+        Some(b'*') => {
             lexer.current.chars.next();
             lexer.skip_multi_line_comment()
         }
@@ -1586,7 +1600,7 @@ const QST: ByteHandler = |lexer| {
         } else {
             Kind::Question2
         }
-    } else if lexer.peek() == Some('.') {
+    } else if lexer.peek_byte() == Some(b'.') {
         // parse `?.1` as `?` `.1`
         if lexer.peek2().is_some_and(|c| c.is_ascii_digit()) {
             Kind::Question
