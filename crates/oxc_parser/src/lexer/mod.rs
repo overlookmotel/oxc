@@ -441,15 +441,35 @@ impl<'a> Lexer<'a> {
 
     /// Section 12.4 Multi Line Comment
     fn skip_multi_line_comment(&mut self) -> Kind {
+        // Find comment close or line terminator
+        loop {
+            if let Some(c) = self.current.chars.next() {
+                if c == '*' && self.next_eq('/') {
+                    self.trivia_builder
+                        .add_multi_line_comment(self.current.token.start, self.offset());
+                    return Kind::MultiLineComment;
+                }
+                if is_line_terminator(c) {
+                    break;
+                }
+            } else {
+                self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
+                return Kind::Eof;
+            }
+        }
+
+        self.current.token.is_on_new_line = true;
+
+        // Continue searching for comment end, but no need to check for line terminators this time
+        // as we already found one
         while let Some(c) = self.current.chars.next() {
             if c == '*' && self.next_eq('/') {
                 self.trivia_builder.add_multi_line_comment(self.current.token.start, self.offset());
                 return Kind::MultiLineComment;
             }
-            if is_line_terminator(c) {
-                self.current.token.is_on_new_line = true;
-            }
         }
+
+        // EOF
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
         Kind::Eof
     }
