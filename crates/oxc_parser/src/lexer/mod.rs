@@ -443,35 +443,62 @@ impl<'a> Lexer<'a> {
     fn skip_multi_line_comment(&mut self) -> Kind {
         // Find comment close or line terminator
         loop {
-            if let Some(c) = self.current.chars.next() {
-                if c == '*' && self.next_eq('/') {
-                    self.trivia_builder
-                        .add_multi_line_comment(self.current.token.start, self.offset());
-                    return Kind::MultiLineComment;
-                }
-                if is_line_terminator(c) {
-                    break;
-                }
-            } else {
+            let remaining = self.current.chars.as_str().as_bytes();
+            if remaining.len() < 2 {
+                // Consume last char if there is one
+                self.current.chars.next();
                 self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
                 return Kind::Eof;
             }
+
+            if remaining[0..2] == [b'*', b'/'] {
+                self.consume_char();
+                self.consume_char();
+                self.trivia_builder.add_multi_line_comment(self.current.token.start, self.offset());
+                return Kind::MultiLineComment;
+            }
+
+            let b = remaining[0];
+            if b == b'\r' || b == b'\n' {
+                self.consume_char();
+                break;
+            }
+
+            if !b.is_ascii() {
+                let c = self.consume_char();
+                if is_irregular_line_terminator(c) {
+                    break;
+                }
+            }
+
+            self.consume_char();
         }
 
         self.current.token.is_on_new_line = true;
 
-        // Continue searching for comment end, but no need to check for line terminators this time
-        // as we already found one
-        while let Some(c) = self.current.chars.next() {
-            if c == '*' && self.next_eq('/') {
+        // We found a line break.
+        // Continue searching for comment end, but no need to check for more line breaks.
+        loop {
+            let remaining = self.current.chars.as_str().as_bytes();
+            if remaining.len() < 2 {
+                // Consume last char if there is one
+                self.current.chars.next();
+                break;
+            }
+
+            if remaining[0..2] == [b'*', b'/'] {
+                self.consume_char();
+                self.consume_char();
                 self.trivia_builder.add_multi_line_comment(self.current.token.start, self.offset());
                 return Kind::MultiLineComment;
             }
+
+            self.consume_char();
         }
 
         // EOF
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
-        Kind::Eof
+        return Kind::Eof;
     }
 
     /// Section 12.5 Hashbang Comments
