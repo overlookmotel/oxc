@@ -507,7 +507,7 @@ impl<'a> Lexer<'a> {
 
         // EOF
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
-        return Kind::Eof;
+        Kind::Eof
     }
 
     /// Section 12.5 Hashbang Comments
