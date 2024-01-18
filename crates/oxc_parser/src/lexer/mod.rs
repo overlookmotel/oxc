@@ -425,17 +425,26 @@ impl<'a> Lexer<'a> {
     /// Section 12.4 Single Line Comment
     #[allow(clippy::cast_possible_truncation)]
     fn skip_single_line_comment(&mut self) -> Kind {
-        let start = self.current.token.start;
-        while let Some(c) = self.current.chars.next() {
-            if is_line_terminator(c) {
-                self.current.token.is_on_new_line = true;
-                self.trivia_builder
-                    .add_single_line_comment(start, self.offset() - c.len_utf8() as u32);
-                return Kind::Comment;
+        while !self.current.chars.as_str().is_empty() {
+            let b = self.current.chars.as_str().as_bytes()[0];
+            if b == b'\r' || b == b'\n' {
+                self.consume_char();
+                break;
+            }
+
+            if b.is_ascii() {
+                self.consume_char();
+            } else {
+                let c = self.consume_char();
+                if is_irregular_line_terminator(c) {
+                    break;
+                }
             }
         }
-        // EOF
-        self.trivia_builder.add_single_line_comment(start, self.offset());
+
+        // We can set `is_on_new_line` unconditionally, as if we're at EOF its value is irrelevant
+        self.current.token.is_on_new_line = true;
+        self.trivia_builder.add_single_line_comment(self.current.token.start, self.offset());
         Kind::Comment
     }
 
