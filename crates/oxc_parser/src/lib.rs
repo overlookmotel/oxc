@@ -141,7 +141,8 @@ impl<'a> Parser<'a> {
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
-        let source_text_for_lexer = if source_text.len() > MAX_LEN { "\0" } else { source_text };
+        let source_text_for_lexer =
+            if source_text.len() > MAX_LEN { "\0" } else { allocator.alloc_str(source_text) };
 
         Self {
             lexer: Lexer::new(allocator, source_text_for_lexer, source_type),
