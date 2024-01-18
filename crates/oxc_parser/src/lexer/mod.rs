@@ -378,45 +378,15 @@ impl<'a> Lexer<'a> {
         }
 
         // Skip a single space.
-        // It's very common for JS code to contain a single space between tokens (e.g. `x = y + 1`),
-        // so handle this common case without branching.
-        // We skip a space without branching by manually mutating the `Chars` iterator's pointer
-        // - add 1 if next char is a space, or add 0 if it's not.
-        // The unconditional add is what makes this branchless.
-        let byte = remaining.as_bytes()[0];
-        let increment = usize::from(byte == 32);
-        // SAFETY: Depends on internal implementation details of `Chars<'a>`.
-        // `Chars<'a>` wraps a `slice::Iter<'a, u8>`.
-        // `slice::Iter<'a, u8>` has fields:
-        //   * `ptr`: pointer to current position in the string being iterated.
-        //   * `end_or_len`: pointer to end of the string being iterated.
-        // Here we mutate value of the `ptr` field.
-        // We handle these fields being in either order, and check that both fields are what's expected
-        // for a sample string. So highly likely a change to internal implementation of `Chars<'a>`
-        // would cause these checks to fail, rather than cause UB.
-        // But it is theoretically possible this could become unsound if layout of `Chars<'a>` changed.
-        unsafe {
-            let p = std::ptr::addr_of_mut!(self.current.chars).cast::<usize>();
-
-            // Offset pointer to point to `ptr` field of `slice::Iter<'a, u8>`.
-            // This is const-folded down to either nothing, or just `let p = p.add(1);`.
-            let ptr_offset = {
-                let str = "xyz";
-                #[allow(clippy::transmute_undefined_repr)]
-                let parts = std::mem::transmute::<_, [*const u8; 2]>(str.chars());
-                if parts[0] == str.as_ptr() {
-                    assert!(parts[1] == str.as_ptr().add(str.len()));
-                    0
-                } else {
-                    assert!(parts[1] == str.as_ptr());
-                    assert!(parts[0] == str.as_ptr().add(str.len()));
-                    1
-                }
-            };
-            let p = p.add(ptr_offset);
-
-            *p += increment;
-        }
+        // It's very common for JS code to contain a single space between tokens (e.g. `x = y + 1`).
+        // Slice off a leading space if there is one, without a branch.
+        // Equivalent to `self.current.chars = remaining.strip_prefix(' ').unwrap_or(remaining).chars()`
+        // but a few less instructions.
+        let next_byte = remaining.as_bytes()[0];
+        let skip = usize::from(next_byte == b' ');
+        // SAFETY: `skip` is 1 only if next byte is an ASCII space, so can safely slice off `skip` bytes.
+        // Otherwise, `skip` is 0 in which case this is a no-op.
+        unsafe { self.current.chars = remaining.get_unchecked(skip..).chars() };
 
         // Get next token, skipping over further whitespace
         loop {
