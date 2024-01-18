@@ -11,6 +11,7 @@ mod string_builder;
 mod token;
 mod trivia_builder;
 
+use assert_unchecked::assert_unchecked;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
@@ -425,87 +426,135 @@ impl<'a> Lexer<'a> {
     /// Section 12.4 Single Line Comment
     #[allow(clippy::cast_possible_truncation)]
     fn skip_single_line_comment(&mut self) -> Kind {
-        while !self.current.chars.as_str().is_empty() {
-            let b = self.current.chars.as_str().as_bytes()[0];
+        const LS_BYTES: [u8; 3] = [0xE2, 0x80, 0xA8];
+        const PS_BYTES: [u8; 3] = [0xE2, 0x80, 0xA9];
+        debug_assert!(LS_BYTES == '\u{2028}'.to_string().as_bytes());
+        debug_assert!(PS_BYTES == '\u{2029}'.to_string().as_bytes());
+
+        // Iterate over bytes rather than chars for speed.
+        // NB: `index` can be in the middle of a mult-byte Unicode character in the course of this loop,
+        // but we only exit the loop when we know `index` is aligned on a UTF-8 char boundary.
+        let remaining = self.current.chars.as_str().as_bytes();
+        let mut index = 0;
+        let mut last_char_len = 0;
+        while index < remaining.len() {
+            let b = remaining[index];
             if b == b'\r' || b == b'\n' {
-                self.consume_char();
+                index += 1;
+                last_char_len = 1;
                 break;
             }
 
-            if b.is_ascii() {
-                self.consume_char();
-            } else {
-                let c = self.consume_char();
-                if is_irregular_line_terminator(c) {
+            // Check for irregular Unicode line break (LS or PS)
+            if b == LS_BYTES[0] {
+                // SAFETY: `0xE2` is always the start of a 3-byte unicode UTF-8 char
+                unsafe { assert_unchecked!(index + 3 <= remaining.len()) };
+                if remaining[index + 1] == LS_BYTES[1]
+                    && (remaining[index + 2] == LS_BYTES[2] || remaining[index + 2] == PS_BYTES[2])
+                {
+                    index += 3;
+                    last_char_len = 3;
                     break;
                 }
+                // Some other 3-byte Unicode character
+                index += 3;
+                continue;
             }
+
+            index += 1;
         }
 
-        // We can set `is_on_new_line` unconditionally, as if we're at EOF its value is irrelevant
+        // Update `chars` iterator.
+        // SAFETY: Loop above only stops at EOF, after a single-byte ASCII line break,
+        // or after a 3-byte Unicode line break.
+        // In all cases, `index` is on a valid UTF-8 character boundary.
+        unsafe {
+            self.current.chars = std::str::from_utf8_unchecked(&remaining[index..]).chars();
+        }
+
+        // We can set `is_on_new_line` unconditionally, as if we're at EOF, its value is irrelevant
         self.current.token.is_on_new_line = true;
-        self.trivia_builder.add_single_line_comment(self.current.token.start, self.offset());
+        self.trivia_builder.add_single_line_comment(
+            self.current.token.start,
+            self.offset() - last_char_len as u32,
+        );
         Kind::Comment
     }
 
     /// Section 12.4 Multi Line Comment
     fn skip_multi_line_comment(&mut self) -> Kind {
-        // Find comment close or line terminator
+        const LS_BYTES: [u8; 3] = [0xE2, 0x80, 0xA8];
+        const PS_BYTES: [u8; 3] = [0xE2, 0x80, 0xA9];
+        debug_assert!(LS_BYTES == '\u{2028}'.to_string().as_bytes());
+        debug_assert!(PS_BYTES == '\u{2029}'.to_string().as_bytes());
+
+        // Find comment close or line terminator.
+        // Iterate over bytes rather than chars for speed.
+        // NB: `index` can be in the middle of a mult-byte Unicode character in the course of this loop,
+        // but we only exit the loop when we know `index` is aligned on a UTF-8 char boundary.
+        let remaining = self.current.chars.as_str().as_bytes();
+        let mut index = 0;
         loop {
-            let remaining = self.current.chars.as_str().as_bytes();
-            if remaining.len() < 2 {
-                // Consume last char if there is one
-                self.current.chars.next();
+            // If less than 2 bytes left, must be unterminated
+            if index > remaining.len() - 2 {
+                self.current.chars = "".chars();
                 self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
                 return Kind::Eof;
             }
 
-            if remaining[0..2] == [b'*', b'/'] {
-                self.consume_char();
-                self.consume_char();
+            if remaining[index..index + 2] == [b'*', b'/'] {
+                // SAFETY: Next 2 bytes are `*/`, so `index + 2` is a valid UTF-8 character boundary
+                unsafe {
+                    self.current.chars =
+                        std::str::from_utf8_unchecked(&remaining[index + 2..]).chars();
+                }
                 self.trivia_builder.add_multi_line_comment(self.current.token.start, self.offset());
                 return Kind::MultiLineComment;
             }
 
-            let b = remaining[0];
+            let b = remaining[index];
             if b == b'\r' || b == b'\n' {
-                self.consume_char();
+                index += 1;
                 break;
             }
 
-            if !b.is_ascii() {
-                let c = self.consume_char();
-                if is_irregular_line_terminator(c) {
+            // Check for irregular Unicode line break (LS or PS)
+            if b == LS_BYTES[0] {
+                // SAFETY: `0xE2` is always the start of a 3-byte unicode UTF-8 char
+                unsafe { assert_unchecked!(index + 3 <= remaining.len()) };
+                if remaining[index + 1] == LS_BYTES[1]
+                    && (remaining[index + 2] == LS_BYTES[2] || remaining[index + 2] == PS_BYTES[2])
+                {
+                    index += 3;
                     break;
                 }
+                index += 3;
+                continue;
             }
 
-            self.consume_char();
+            index += 1;
         }
-
-        self.current.token.is_on_new_line = true;
 
         // We found a line break.
         // Continue searching for comment end, but no need to check for more line breaks.
-        loop {
-            let remaining = self.current.chars.as_str().as_bytes();
-            if remaining.len() < 2 {
-                // Consume last char if there is one
-                self.current.chars.next();
-                break;
-            }
+        self.current.token.is_on_new_line = true;
 
-            if remaining[0..2] == [b'*', b'/'] {
-                self.consume_char();
-                self.consume_char();
+        while index < remaining.len() - 1 {
+            if remaining[index..index + 2] == [b'*', b'/'] {
+                // SAFETY: Next 2 bytes are `*/`, so `index + 2` is a valid UTF-8 character boundary
+                unsafe {
+                    self.current.chars =
+                        std::str::from_utf8_unchecked(&remaining[index + 2..]).chars();
+                }
                 self.trivia_builder.add_multi_line_comment(self.current.token.start, self.offset());
                 return Kind::MultiLineComment;
             }
 
-            self.consume_char();
+            index += 1;
         }
 
         // EOF
+        self.current.chars = "".chars();
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
         Kind::Eof
     }
