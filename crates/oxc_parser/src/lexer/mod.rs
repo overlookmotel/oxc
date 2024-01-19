@@ -280,7 +280,8 @@ impl<'a> Lexer<'a> {
 
     #[inline]
     fn rewind_eof_sentinel(&mut self) {
-        self.current.chars = EOF_SENTINEL.chars();
+        let source_end = &self.source[self.source.len() - EOF_SENTINEL.len()..];
+        self.current.chars = source_end.chars();
     }
 
     /// Peek the next char without advancing the position
@@ -944,6 +945,10 @@ impl<'a> Lexer<'a> {
                     let text = builder.get_mut_string_without_current_ascii_char(self);
                     self.read_string_escape_sequence(text, true, &mut is_valid_escape_sequence);
                 }
+                '\0' if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    break;
+                }
                 _ => builder.push_matching(c),
             }
         }
@@ -1059,6 +1064,9 @@ impl<'a> Lexer<'a> {
     ) {
         let start = self.offset();
         if self.current.chars.next() != Some('u') {
+            if self.is_eof() {
+                self.rewind_eof_sentinel();
+            }
             let range = Span::new(start, self.offset());
             self.error(diagnostics::UnicodeEscapeSequence(range));
             return;
@@ -1313,6 +1321,10 @@ impl<'a> Lexer<'a> {
                 '1'..='9' if in_template => {
                     // error raised within the parser by `diagnostics::TemplateLiteral`
                     *is_valid_escape_sequence = false;
+                }
+                '\0' if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
                 }
                 other => {
                     // NonOctalDecimalEscapeSequence \8 \9 in strict mode
