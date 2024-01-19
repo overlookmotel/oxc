@@ -11,12 +11,14 @@ mod string_builder;
 mod token;
 mod trivia_builder;
 
+use assert_unchecked::assert_unchecked;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
 use oxc_allocator::{Allocator, String};
 use oxc_ast::ast::RegExpFlags;
 use oxc_diagnostics::Error;
+use oxc_index::const_assert;
 use oxc_span::{SourceType, Span};
 use oxc_syntax::{
     identifier::{
@@ -32,7 +34,7 @@ pub use self::{
     token::Token,
 };
 use self::{string_builder::AutoCow, trivia_builder::TriviaBuilder};
-use crate::{diagnostics, MAX_LEN};
+use crate::{diagnostics, EOF_SENTINEL, MAX_LEN};
 
 #[derive(Debug, Clone)]
 pub struct LexerCheckpoint<'a> {
@@ -259,6 +261,12 @@ impl<'a> Lexer<'a> {
         (self.source.len() - self.current.chars.as_str().len()) as u32
     }
 
+    /// Get if at end of file (i.e. at or passed EOF sentinel)
+    #[inline]
+    fn is_eof(&self) -> bool {
+        self.current.chars.as_str().len() <= EOF_SENTINEL.len()
+    }
+
     /// Get the current unterminated token range
     fn unterminated_range(&self) -> Span {
         Span::new(self.current.token.start, self.offset())
@@ -268,6 +276,11 @@ impl<'a> Lexer<'a> {
     #[inline]
     fn consume_char(&mut self) -> char {
         self.current.chars.next().unwrap()
+    }
+
+    #[inline]
+    fn rewind_eof_sentinel(&mut self) {
+        self.current.chars = EOF_SENTINEL.chars();
     }
 
     /// Peek the next char without advancing the position
@@ -371,14 +384,11 @@ impl<'a> Lexer<'a> {
     /// Whitespace and line terminators are skipped
     fn read_next_token(&mut self) -> Kind {
         loop {
-            let offset = self.offset();
-            self.current.token.start = offset;
+            self.current.token.start = self.offset();
 
             let remaining = self.current.chars.as_str();
-            if remaining.is_empty() {
-                return Kind::Eof;
-            }
-
+            // SAFETY: We cannot have reached EOF as would have hit EOF sentinel already
+            unsafe { assert_unchecked!(!remaining.is_empty()) };
             let byte = remaining.as_bytes()[0];
             // SAFETY: Check for `remaining.is_empty()` ensures not at end of file,
             // and `byte` is the byte at current position of `self.current.chars`.
@@ -429,6 +439,10 @@ impl<'a> Lexer<'a> {
                     .add_single_line_comment(start, self.offset() - c.len_utf8() as u32);
                 return Kind::Skip;
             }
+            if c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
+                break;
+            }
         }
         // EOF
         self.trivia_builder.add_single_line_comment(start, self.offset());
@@ -445,6 +459,10 @@ impl<'a> Lexer<'a> {
             if is_line_terminator(c) {
                 self.current.token.is_on_new_line = true;
             }
+            if c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
+                break;
+            }
         }
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
         Kind::Eof
@@ -454,6 +472,10 @@ impl<'a> Lexer<'a> {
     fn read_hashbang_comment(&mut self) -> Kind {
         while let Some(c) = self.current.chars.next().as_ref() {
             if is_line_terminator(*c) {
+                break;
+            }
+            if *c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
                 break;
             }
         }
@@ -577,6 +599,11 @@ impl<'a> Lexer<'a> {
             Some('\\') => {
                 builder.force_allocation_without_current_ascii_char(self);
                 self.identifier_unicode_escape_sequence(&mut builder, true);
+            }
+            Some('\0') if self.is_eof() => {
+                self.rewind_eof_sentinel();
+                self.error(diagnostics::UnexpectedEnd(Span::new(start, start)));
+                return Kind::Undetermined;
             }
             Some(c) => {
                 #[allow(clippy::cast_possible_truncation)]
@@ -797,6 +824,11 @@ impl<'a> Lexer<'a> {
                     self.error(diagnostics::UnterminatedString(self.unterminated_range()));
                     return Kind::Undetermined;
                 }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
+                    return Kind::Undetermined;
+                }
                 Some(c @ ('"' | '\'')) => {
                     if c == delimiter {
                         self.save_string(builder.has_escape(), builder.finish_without_push(self));
@@ -836,6 +868,11 @@ impl<'a> Lexer<'a> {
                     #[allow(clippy::cast_possible_truncation)]
                     let pattern_end = self.offset() - c.len_utf8() as u32;
                     return (pattern_end, RegExpFlags::empty());
+                }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedRegExp(self.unterminated_range()));
+                    return (self.offset(), RegExpFlags::empty());
                 }
                 Some(c) => {
                     if in_escape {
@@ -993,6 +1030,11 @@ impl<'a> Lexer<'a> {
                         return Kind::Str;
                     }
                     builder.push_matching(c);
+                }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
+                    return Kind::Undetermined;
                 }
                 Some(other) => {
                     builder.push_matching(other);
@@ -1308,7 +1350,7 @@ type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 #[rustfmt::skip]
 static BYTE_HANDLERS: [ByteHandler; 256] = [
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
+    EOF, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
     ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
     SPS, EXL, QOT, HAS, IDT, PRC, AMP, QOT, PNO, PNC, ATR, PLS, COM, MIN, PRD, SLH, // 2
     ZER, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, COL, SEM, LSS, EQL, GTR, QST, // 3
@@ -1379,7 +1421,17 @@ macro_rules! ascii_byte_handler {
     };
 }
 
-// `\0` `\1` etc
+// `\0`: EOF sentinel or null byte
+const_assert!(EOF_SENTINEL.as_bytes()[0] == 0);
+ascii_byte_handler!(EOF(lexer) {
+    if lexer.is_eof() {
+        Kind::Eof
+    } else {
+        ERR(lexer)
+    }
+});
+
+// `\1` `\2` etc
 ascii_byte_handler!(ERR(lexer) {
     let c = lexer.consume_char();
     lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));

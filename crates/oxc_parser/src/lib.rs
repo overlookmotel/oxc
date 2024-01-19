@@ -74,7 +74,7 @@ mod diagnostics;
 mod lexer;
 
 use context::{Context, StatementContext};
-use oxc_allocator::Allocator;
+use oxc_allocator::{Allocator, String as ArenaString};
 use oxc_ast::{ast::Program, AstBuilder, Trivias};
 use oxc_diagnostics::{Error, Result};
 use oxc_span::{ModuleKind, SourceType, Span};
@@ -87,6 +87,9 @@ use crate::{
 /// Maximum length of source in bytes which can be parsed (~4 GiB).
 // Span's start and end are u32s, so size limit is u32::MAX bytes.
 pub const MAX_LEN: usize = u32::MAX as usize;
+
+/// EOF sentinel added to end of source
+pub(crate) const EOF_SENTINEL: &str = "\0";
 
 /// Return value of parser consisting of AST, errors and comments
 ///
@@ -141,8 +144,15 @@ impl<'a> Parser<'a> {
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
-        let source_text_for_lexer =
-            if source_text.len() > MAX_LEN { "\0" } else { allocator.alloc_str(source_text) };
+        let source_text_for_lexer = if source_text.len() > MAX_LEN { "\0" } else { source_text };
+
+        let mut source_postfixed = ArenaString::with_capacity_in(
+            source_text_for_lexer.len() + EOF_SENTINEL.len(),
+            allocator,
+        );
+        source_postfixed.push_str(source_text_for_lexer);
+        source_postfixed.push_str(EOF_SENTINEL);
+        let source_text_for_lexer = allocator.alloc(source_postfixed);
 
         Self {
             lexer: Lexer::new(allocator, source_text_for_lexer, source_type),
