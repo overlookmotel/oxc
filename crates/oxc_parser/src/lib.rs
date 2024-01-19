@@ -146,7 +146,8 @@ impl<'a> Parser<'a> {
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
-        let lexer_source = if source_text.len() > MAX_LEN { "\0" } else { source_text };
+        let is_overlong = source_text.len() > MAX_LEN;
+        let lexer_source = if is_overlong { "\0" } else { source_text };
 
         // Copy source into arena and add EOF sentinel to end.
         // Using `allocator.alloc_layout()` to allocate arena space and raw pointers for copying,
@@ -160,7 +161,7 @@ impl<'a> Parser<'a> {
         // Allocation in arena was made in 1 request for a contiguous block,
         // `source_text` and `EOF_SENTINEL` are `&str`s and therefore valid UTF-8.
         // Their concatenation therefore is a valid UTF-8 string too.
-        let source_text_for_lexer = unsafe {
+        let lexer_source = unsafe {
             std::ptr::copy_nonoverlapping(lexer_source.as_ptr(), ptr, lexer_source.len());
             std::ptr::copy_nonoverlapping(
                 EOF_SENTINEL.as_ptr(),
@@ -172,7 +173,7 @@ impl<'a> Parser<'a> {
         };
 
         Self {
-            lexer: Lexer::new(allocator, source_text_for_lexer, source_type),
+            lexer: Lexer::new(allocator, lexer_source, source_type),
             source_type,
             source_text,
             errors: vec![],
