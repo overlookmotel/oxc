@@ -316,8 +316,8 @@ impl<'a> Lexer<'a> {
     fn unexpected_err(&mut self) {
         let offset = self.current_offset();
         match self.peek() {
-            Some(c) => self.error(diagnostics::InvalidCharacter(c, offset)),
-            None => self.error(diagnostics::UnexpectedEnd(offset)),
+            Some(c) if !self.is_eof() => self.error(diagnostics::InvalidCharacter(c, offset)),
+            _ => self.error(diagnostics::UnexpectedEnd(offset)),
         }
     }
 
