@@ -87,16 +87,17 @@ use crate::{
 /// EOF sentinel added to end of source
 pub(crate) const EOF_SENTINEL: &str = "\0";
 
-/// Maximum length of source in bytes which can be parsed.
+/// Maximum length of source which can be parsed (in bytes).
 /// ~4 GiB on 64-bit systems, ~2 GiB on 32-bit systems.
 // Size is constrained by 2 factors:
-// 1. `Span`'s `start` and `end` are u32s, which limits size to u32::MAX bytes.
+// 1. `Span`'s `start` and `end` are u32s, which limits size to `u32::MAX` bytes.
 // 2. `std::alloc::Layout` used in `Parser::new` limits allocations to `isize::MAX`.
 //    Deduct the length of EOF sentinel which is added to end of source.
-//    This limit is only lower on 32-bit systems.
-pub const MAX_LEN: usize = if std::mem::size_of::<usize>() >= 4 {
+pub const MAX_LEN: usize = if std::mem::size_of::<usize>() >= 8 {
+    // 64-bit systems
     u32::MAX as usize
 } else {
+    // 32-bit or 16-bit systems
     isize::MAX as usize - EOF_SENTINEL.len()
 };
 
