@@ -171,11 +171,15 @@ impl<'a> Parser<'a> {
             let slice = std::slice::from_raw_parts(ptr, len_inc_sentinel);
             std::str::from_utf8_unchecked(slice)
         };
+        // Give parser original source without EOF sentinel, referencing the same memory as lexer.
+        // If source is overlong, use original source text for error reporting.
+        let parser_source =
+            if is_overlong { source_text } else { &lexer_source[..source_text.len()] };
 
         Self {
             lexer: Lexer::new(allocator, lexer_source, source_type),
             source_type,
-            source_text,
+            source_text: parser_source,
             errors: vec![],
             token: Token::default(),
             prev_token_end: 0,
