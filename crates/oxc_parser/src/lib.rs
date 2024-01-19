@@ -368,38 +368,42 @@ mod test {
         }
     }
 
-    // Source with length u32::MAX + 1 fails to parse
+    // Source with length MAX_LEN + 1 fails to parse
     #[test]
     fn overlong_source() {
+        let mut source = String::with_capacity(MAX_LEN + 1);
+        while source.len() < MAX_LEN - 16 {
+            source.push_str("var x = 123456;\n");
+        }
+        while source.len() - 1 < MAX_LEN {
+            source.push('\n');
+        }
+        assert_eq!(source.len() - 1, MAX_LEN);
+
         let allocator = Allocator::default();
-        let source_type = SourceType::default();
-        let source = "var x = 123456;\n".repeat(256 * 1024 * 1024);
-        assert_eq!(source.len() - 1, u32::MAX as usize);
-        let ret = Parser::new(&allocator, &source, source_type).parse();
+        let ret = Parser::new(&allocator, &source, SourceType::default()).parse();
         assert!(ret.program.is_empty());
         assert!(ret.panicked);
         assert_eq!(ret.errors.len(), 1);
         assert_eq!(ret.errors.first().unwrap().to_string(), "Source length exceeds 4 GiB limit");
     }
 
-    // Source with length u32::MAX parses OK.
+    // Source with length MAX_LEN parses OK.
     // This test takes over 1 minute on an M1 Macbook Pro unless compiled in release mode.
     // `not(debug_assertions)` is a proxy for detecting release mode.
     #[cfg(not(debug_assertions))]
     #[test]
     fn legal_length_source() {
-        let allocator = Allocator::default();
-        let source_type = SourceType::default();
-
-        // Build a string u32::MAX bytes long which doesn't take too long to parse
+        // Build a string MAX_LEN bytes long which doesn't take too long to parse
         let head = "const x = 1;\n/*";
         let foot = "*/\nconst y = 2;\n";
-        let mut source = "x".repeat(u32::MAX as usize);
+        let mut source = "x".repeat(MAX_LEN as usize);
         source.replace_range(..head.len(), head);
         source.replace_range(source.len() - foot.len().., foot);
-        assert_eq!(source.len(), u32::MAX as usize);
+        assert_eq!(source.len(), MAX_LEN);
 
-        let ret = Parser::new(&allocator, &source, source_type).parse();
+        let allocator = Allocator::default();
+        let ret = Parser::new(&allocator, &source, SourceType::default()).parse();
         assert!(!ret.panicked);
         assert!(ret.errors.is_empty());
         assert_eq!(ret.program.body.len(), 2);
