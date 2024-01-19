@@ -84,14 +84,21 @@ use crate::{
     state::ParserState,
 };
 
-/// Maximum length of source in bytes which can be parsed (~4 GiB).
-// Span's start and end are u32s, so size limit is u32::MAX bytes.
-// TODO: This needs to be capped at `i32::MAX - EOF_SENTINEL.len()` on 32-bit systems
-// to satisfy requirements of `std::alloc::Layout`.
-pub const MAX_LEN: usize = u32::MAX as usize;
-
 /// EOF sentinel added to end of source
 pub(crate) const EOF_SENTINEL: &str = "\0";
+
+/// Maximum length of source in bytes which can be parsed.
+/// ~4 GiB on 64-bit systems, ~2 GiB on 32-bit systems.
+// Size is constrained by 2 factors:
+// 1. `Span`'s `start` and `end` are u32s, which limits size to u32::MAX bytes.
+// 2. `std::alloc::Layout` used in `Parser::new` limits allocations to `isize::MAX`.
+//    Deduct the length of EOF sentinel which is added to end of source.
+//    This limit is only lower on 32-bit systems.
+pub const MAX_LEN: usize = if std::mem::size_of::<usize>() >= 4 {
+    u32::MAX as usize
+} else {
+    isize::MAX as usize - EOF_SENTINEL.len()
+};
 
 /// Return value of parser consisting of AST, errors and comments
 ///
@@ -143,6 +150,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Create a new parser
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
