@@ -147,7 +147,7 @@ impl<'a> Parser<'a> {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
         let is_overlong = source_text.len() > MAX_LEN;
-        let lexer_source = if is_overlong { "\0" } else { source_text };
+        let lexer_source = if is_overlong { "\u{1}" } else { source_text };
 
         // Copy source into arena and add EOF sentinel to end.
         // Using `allocator.alloc_layout()` to allocate arena space and raw pointers for copying,
