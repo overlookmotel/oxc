@@ -74,7 +74,7 @@ mod diagnostics;
 mod lexer;
 
 use context::{Context, StatementContext};
-use oxc_allocator::{Allocator, String as ArenaString};
+use oxc_allocator::Allocator;
 use oxc_ast::{ast::Program, AstBuilder, Trivias};
 use oxc_diagnostics::{Error, Result};
 use oxc_span::{ModuleKind, SourceType, Span};
@@ -86,6 +86,8 @@ use crate::{
 
 /// Maximum length of source in bytes which can be parsed (~4 GiB).
 // Span's start and end are u32s, so size limit is u32::MAX bytes.
+// TODO: This needs to be capped at `i32::MAX - EOF_SENTINEL.len()` on 32-bit systems
+// to satisfy requirements of `std::alloc::Layout`.
 pub const MAX_LEN: usize = u32::MAX as usize;
 
 /// EOF sentinel added to end of source
@@ -144,15 +146,30 @@ impl<'a> Parser<'a> {
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
-        let source_text_for_lexer = if source_text.len() > MAX_LEN { "\0" } else { source_text };
+        let lexer_source = if source_text.len() > MAX_LEN { "\0" } else { source_text };
 
-        let mut source_postfixed = ArenaString::with_capacity_in(
-            source_text_for_lexer.len() + EOF_SENTINEL.len(),
-            allocator,
-        );
-        source_postfixed.push_str(source_text_for_lexer);
-        source_postfixed.push_str(EOF_SENTINEL);
-        let source_text_for_lexer = allocator.alloc(source_postfixed);
+        // Copy source into arena and add EOF sentinel to end.
+        // Using `allocator.alloc_layout()` to allocate arena space and raw pointers for copying,
+        // as `oxc_allocator::String` is extremely slow.
+        let len_inc_sentinel = lexer_source.len() + EOF_SENTINEL.len();
+        let layout = std::alloc::Layout::from_size_align(len_inc_sentinel, 1).unwrap();
+        let ptr = allocator.alloc_layout(layout).as_ptr();
+        // SAFETY: `lexer_source` and `EOF_SENTINEL` are valid for reads for their respective lengths.
+        // Strings have no alignment requirements.
+        // Neither source can overlap destination as we allocated destination from arena.
+        // Allocation in arena was made in 1 request for a contiguous block,
+        // `source_text` and `EOF_SENTINEL` are `&str`s and therefore valid UTF-8.
+        // Their concatenation therefore is a valid UTF-8 string too.
+        let source_text_for_lexer = unsafe {
+            std::ptr::copy_nonoverlapping(lexer_source.as_ptr(), ptr, lexer_source.len());
+            std::ptr::copy_nonoverlapping(
+                EOF_SENTINEL.as_ptr(),
+                ptr.add(lexer_source.len()),
+                EOF_SENTINEL.len(),
+            );
+            let slice = std::slice::from_raw_parts(ptr, len_inc_sentinel);
+            std::str::from_utf8_unchecked(slice)
+        };
 
         Self {
             lexer: Lexer::new(allocator, source_text_for_lexer, source_type),
