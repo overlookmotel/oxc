@@ -280,12 +280,6 @@ impl<'a> Lexer<'a> {
         self.current.chars.next().unwrap()
     }
 
-    #[inline]
-    fn rewind_eof_sentinel(&mut self) {
-        let source_end = &self.source[self.source.len() - EOF_SENTINEL.len()..];
-        self.current.chars = source_end.chars();
-    }
-
     /// Peek the next char without advancing the position
     #[inline]
     fn peek(&self) -> Option<char> {
@@ -319,6 +313,14 @@ impl<'a> Lexer<'a> {
     fn current_offset(&self) -> Span {
         let offset = self.offset();
         Span::new(offset, offset)
+    }
+
+    /// Rewind `chars` iterator to the EOF sentinel.
+    /// Needs to be called after consuming EOF bytes.
+    #[inline]
+    fn rewind_eof_sentinel(&mut self) {
+        let source_end = &self.source[self.source.len() - EOF_SENTINEL.len()..];
+        self.current.chars = source_end.chars();
     }
 
     /// Return `IllegalCharacter` Error or `UnexpectedEnd` if EOF
