@@ -654,6 +654,9 @@ impl<'a> Lexer<'a> {
         if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
             self.current.chars.next();
         } else {
+            if self.is_eof() {
+                self.rewind_eof_sentinel();
+            }
             self.unexpected_err();
             return Kind::Undetermined;
         }
