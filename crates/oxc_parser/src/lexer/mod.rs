@@ -14,7 +14,7 @@ mod trivia_builder;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
-use oxc_allocator::{Allocator, String};
+use oxc_allocator::Allocator;
 use oxc_ast::ast::RegExpFlags;
 use oxc_diagnostics::Error;
 use oxc_span::{SourceType, Span};
@@ -1069,7 +1069,7 @@ impl<'a> Lexer<'a> {
     ///   \u{ `CodePoint` }
     fn string_unicode_escape_sequence(
         &mut self,
-        text: &mut String<'a>,
+        text: &mut String,
         is_valid_escape_sequence: &mut bool,
     ) {
         let value = match self.peek() {
@@ -1177,7 +1177,7 @@ impl<'a> Lexer<'a> {
     // EscapeSequence ::
     fn read_string_escape_sequence(
         &mut self,
-        text: &mut String<'a>,
+        text: &mut String,
         in_template: bool,
         is_valid_escape_sequence: &mut bool,
     ) {
