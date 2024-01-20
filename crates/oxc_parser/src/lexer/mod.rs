@@ -1306,7 +1306,7 @@ type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 /// Lookup table mapping any incoming byte to a handler function defined below.
 /// <https://github.com/ratel-rust/ratel-core/blob/master/ratel/src/lexer/mod.rs>
 #[rustfmt::skip]
-static BYTE_HANDLERS: [ByteHandler; 256] = [
+const BYTE_HANDLERS: [ByteHandler; 256] = [
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
     ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
     ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
