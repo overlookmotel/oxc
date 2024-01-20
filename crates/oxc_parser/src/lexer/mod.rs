@@ -1234,30 +1234,33 @@ impl<'a> Lexer<'a> {
                 // LegacyOctalEscapeSequence
                 // NonOctalDecimalEscapeSequence
                 a @ '0'..='7' if !in_template => {
-                    let mut num = String::new_in(self.allocator);
-                    num.push(a);
+                    #[inline]
+                    fn add_digit(num: u32, digit: char) -> u32 {
+                        num * 8 + digit as u32 - u32::from(b'0')
+                    }
+
+                    let mut num = add_digit(0, a);
                     match a {
                         '4'..='7' => {
                             if matches!(self.peek(), Some('0'..='7')) {
                                 let b = self.consume_char();
-                                num.push(b);
+                                num = add_digit(num, b);
                             }
                         }
                         '0'..='3' => {
                             if matches!(self.peek(), Some('0'..='7')) {
                                 let b = self.consume_char();
-                                num.push(b);
+                                num = add_digit(num, b);
                                 if matches!(self.peek(), Some('0'..='7')) {
                                     let c = self.consume_char();
-                                    num.push(c);
+                                    num = add_digit(num, c);
                                 }
                             }
                         }
                         _ => {}
                     }
 
-                    let value =
-                        char::from_u32(u32::from_str_radix(num.as_str(), 8).unwrap()).unwrap();
+                    let value = char::from_u32(num).unwrap();
                     text.push(value);
                 }
                 '0' if in_template && self.peek().is_some_and(|c| c.is_ascii_digit()) => {
