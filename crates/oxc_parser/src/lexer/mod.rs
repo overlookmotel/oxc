@@ -1370,14 +1370,14 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
     IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, BTO, ESC, BTC, CRT, IDT, // 5
     TPL, L_A, L_B, L_C, L_D, L_E, L_F, L_G, IDT, L_I, IDT, L_K, L_L, L_M, L_N, L_O, // 6
     L_P, IDT, L_R, L_S, L_T, L_U, L_V, L_W, IDT, L_Y, IDT, BEO, PIP, BEC, TLD, ERR, // 7
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 8
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // 8
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // 9
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // A
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // B
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
+    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // F
 ];
 
 #[allow(clippy::unnecessary_safety_comment)]
@@ -1938,3 +1938,7 @@ ascii_byte_handler!(L_Y(lexer) match &lexer.identifier_name_handler()[1..] {
 // NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
 #[allow(clippy::redundant_closure_for_method_calls)]
 const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
+
+// Invalid values for first byte of a UTF-8 sequence.
+// NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
+const UNE: ByteHandler = |_| unreachable!("Illegal unicode byte");
