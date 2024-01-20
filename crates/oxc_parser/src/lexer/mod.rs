@@ -1309,7 +1309,7 @@ mod byte_handlers {
     /// Lookup table mapping any incoming byte to a handler function defined below.
     /// <https://github.com/ratel-rust/ratel-core/blob/master/ratel/src/lexer/mod.rs>
     #[rustfmt::skip]
-    pub const BYTE_HANDLER_INDEXES: [u8; 256] = [
+    pub static BYTE_HANDLER_INDEXES: [u8; 256] = [
     //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
         ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
         ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
@@ -1388,7 +1388,7 @@ mod byte_handlers {
     const UNI: u8 = 56;
 
     use super::ByteHandler;
-    pub const BYTE_HANDLERS: [ByteHandler; 57] = {
+    pub static BYTE_HANDLERS: [ByteHandler; 57] = {
         let mut handlers = [super::ERR; 57];
         handlers[SPS as usize] = super::SPS;
         handlers[LIN as usize] = super::LIN;
