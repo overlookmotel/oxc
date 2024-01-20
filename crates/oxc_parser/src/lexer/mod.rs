@@ -11,12 +11,14 @@ mod string_builder;
 mod token;
 mod trivia_builder;
 
+use assert_unchecked::assert_unchecked;
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
 
 use oxc_allocator::{Allocator, String};
 use oxc_ast::ast::RegExpFlags;
 use oxc_diagnostics::Error;
+use oxc_index::const_assert;
 use oxc_span::{SourceType, Span};
 use oxc_syntax::{
     identifier::{
@@ -32,7 +34,7 @@ pub use self::{
     token::Token,
 };
 use self::{string_builder::AutoCow, trivia_builder::TriviaBuilder};
-use crate::{diagnostics, MAX_LEN};
+use crate::{diagnostics, EOF_SENTINEL, MAX_LEN};
 
 #[derive(Debug, Clone)]
 pub struct LexerCheckpoint<'a> {
@@ -105,8 +107,12 @@ impl<'a> Lexer<'a> {
     }
 
     /// Remaining string from `Chars`
+    #[inline]
     pub fn remaining(&self) -> &'a str {
-        self.current.chars.as_str()
+        let s = self.current.chars.as_str();
+        // SAFETY: `chars` iterator can never reach end as we stop at the EOF sentinel
+        unsafe { assert_unchecked!(s.len() >= EOF_SENTINEL.len()) };
+        s
     }
 
     /// Creates a checkpoint storing the current lexer state.
@@ -259,6 +265,14 @@ impl<'a> Lexer<'a> {
         (self.source.len() - self.current.chars.as_str().len()) as u32
     }
 
+    /// Get if at end of file (i.e. at or passed EOF sentinel)
+    #[inline]
+    fn is_eof(&self) -> bool {
+        // NB: Do NOT use `self.remaining()` here as it asserts we always have at least
+        // `EOF_SENTINEL.len()` bytes left
+        self.current.chars.as_str().len() <= EOF_SENTINEL.len()
+    }
+
     /// Get the current unterminated token range
     fn unterminated_range(&self) -> Span {
         Span::new(self.current.token.start, self.offset())
@@ -270,26 +284,31 @@ impl<'a> Lexer<'a> {
         self.current.chars.next().unwrap()
     }
 
-    /// Peek the next char without advancing the position
+    /// Peek the next byte without advancing the position
     #[inline]
-    fn peek(&self) -> Option<char> {
-        self.current.chars.clone().next()
+    fn peek(&self) -> u8 {
+        self.remaining().as_bytes()[0]
     }
 
-    /// Peek the next next char without advancing the position
+    /// Peek the next next byte without advancing the position
     #[inline]
-    fn peek2(&self) -> Option<char> {
-        let mut chars = self.current.chars.clone();
-        chars.next();
-        chars.next()
+    fn peek2(&self) -> u8 {
+        self.remaining().as_bytes()[1]
+    }
+
+    /// Peek the next char without advancing the position
+    #[inline]
+    fn peek_char(&self) -> char {
+        self.current.chars.clone().next().unwrap()
     }
 
     /// Peek the next character, and advance the current position if it matches
     #[inline]
     fn next_eq(&mut self, c: char) -> bool {
-        let matched = self.peek() == Some(c);
+        assert!((c as u32) < 128, "next_eq must be called with an ASCII character");
+        let matched = self.peek() == c as u8;
         if matched {
-            self.current.chars.next();
+            self.consume_char();
         }
         matched
     }
@@ -299,12 +318,21 @@ impl<'a> Lexer<'a> {
         Span::new(offset, offset)
     }
 
+    /// Rewind `chars` iterator to the EOF sentinel.
+    /// Needs to be called after consuming EOF bytes.
+    #[inline]
+    fn rewind_eof_sentinel(&mut self) {
+        let source_end = &self.source[self.source.len() - EOF_SENTINEL.len()..];
+        self.current.chars = source_end.chars();
+    }
+
     /// Return `IllegalCharacter` Error or `UnexpectedEnd` if EOF
     fn unexpected_err(&mut self) {
         let offset = self.current_offset();
-        match self.peek() {
-            Some(c) => self.error(diagnostics::InvalidCharacter(c, offset)),
-            None => self.error(diagnostics::UnexpectedEnd(offset)),
+        if self.is_eof() {
+            self.error(diagnostics::UnexpectedEnd(offset));
+        } else {
+            self.error(diagnostics::InvalidCharacter(self.peek_char(), offset));
         }
     }
 
@@ -371,14 +399,11 @@ impl<'a> Lexer<'a> {
     /// Whitespace and line terminators are skipped
     fn read_next_token(&mut self) -> Kind {
         loop {
-            let offset = self.offset();
-            self.current.token.start = offset;
+            self.current.token.start = self.offset();
 
             let remaining = self.current.chars.as_str();
-            if remaining.is_empty() {
-                return Kind::Eof;
-            }
-
+            // SAFETY: We cannot have reached EOF as would have hit EOF sentinel already
+            unsafe { assert_unchecked!(!remaining.is_empty()) };
             let byte = remaining.as_bytes()[0];
             // SAFETY: Check for `remaining.is_empty()` ensures not at end of file,
             // and `byte` is the byte at current position of `self.current.chars`.
@@ -429,6 +454,10 @@ impl<'a> Lexer<'a> {
                     .add_single_line_comment(start, self.offset() - c.len_utf8() as u32);
                 return Kind::Skip;
             }
+            if c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
+                break;
+            }
         }
         // EOF
         self.trivia_builder.add_single_line_comment(start, self.offset());
@@ -445,6 +474,10 @@ impl<'a> Lexer<'a> {
             if is_line_terminator(c) {
                 self.current.token.is_on_new_line = true;
             }
+            if c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
+                break;
+            }
         }
         self.error(diagnostics::UnterminatedMultiLineComment(self.unterminated_range()));
         Kind::Eof
@@ -456,6 +489,10 @@ impl<'a> Lexer<'a> {
             if is_line_terminator(*c) {
                 break;
             }
+            if *c == '\0' && self.is_eof() {
+                self.rewind_eof_sentinel();
+                break;
+            }
         }
         self.current.token.is_on_new_line = true;
         Kind::HashbangComment
@@ -464,7 +501,9 @@ impl<'a> Lexer<'a> {
     /// Section 12.7.1 Identifier Names
     fn identifier_tail(&mut self, mut builder: AutoCow<'a>) -> &'a str {
         // ident tail
-        while let Some(c) = self.peek() {
+        loop {
+            let c = self.peek_char();
+            // NB: No need to check for EOF sentinel as it fails `is_identifier_part()` test
             if !is_identifier_part(c) {
                 if c == '\\' {
                     self.current.chars.next();
@@ -495,12 +534,12 @@ impl<'a> Lexer<'a> {
 
     /// Section 12.8 Punctuators
     fn read_dot(&mut self) -> Kind {
-        if self.peek() == Some('.') && self.peek2() == Some('.') {
+        if self.peek() == b'.' && self.peek2() == b'.' {
             self.current.chars.next();
             self.current.chars.next();
             return Kind::Dot3;
         }
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek().is_ascii_digit() {
             self.decimal_literal_after_decimal_point()
         } else {
             Kind::Dot
@@ -517,7 +556,7 @@ impl<'a> Lexer<'a> {
             }
         } else if self.next_eq('=') {
             Some(Kind::LtEq)
-        } else if self.peek() == Some('!')
+        } else if self.peek() == b'!'
             // SingleLineHTMLOpenComment `<!--` in script mode
             && self.source_type.is_script()
             && self.remaining().starts_with("!--")
@@ -578,6 +617,11 @@ impl<'a> Lexer<'a> {
                 builder.force_allocation_without_current_ascii_char(self);
                 self.identifier_unicode_escape_sequence(&mut builder, true);
             }
+            Some('\0') if self.is_eof() => {
+                self.rewind_eof_sentinel();
+                self.error(diagnostics::UnexpectedEnd(Span::new(start, start)));
+                return Kind::Undetermined;
+            }
             Some(c) => {
                 #[allow(clippy::cast_possible_truncation)]
                 self.error(diagnostics::InvalidCharacter(
@@ -598,22 +642,22 @@ impl<'a> Lexer<'a> {
     /// 12.9.3 Numeric Literals with `0` prefix
     fn read_zero(&mut self) -> Kind {
         match self.peek() {
-            Some('b' | 'B') => self.read_non_decimal(Kind::Binary),
-            Some('o' | 'O') => self.read_non_decimal(Kind::Octal),
-            Some('x' | 'X') => self.read_non_decimal(Kind::Hex),
-            Some('e' | 'E') => {
+            b'b' | b'B' => self.read_non_decimal(Kind::Binary),
+            b'o' | b'O' => self.read_non_decimal(Kind::Octal),
+            b'x' | b'X' => self.read_non_decimal(Kind::Hex),
+            b'e' | b'E' => {
                 self.current.chars.next();
                 self.read_decimal_exponent()
             }
-            Some('.') => {
+            b'.' => {
                 self.current.chars.next();
                 self.decimal_literal_after_decimal_point_after_digits()
             }
-            Some('n') => {
+            b'n' => {
                 self.current.chars.next();
                 self.check_after_numeric_literal(Kind::Decimal)
             }
-            Some(n) if n.is_ascii_digit() => self.read_legacy_octal(),
+            n if n.is_ascii_digit() => self.read_legacy_octal(),
             _ => self.check_after_numeric_literal(Kind::Decimal),
         }
     }
@@ -621,31 +665,37 @@ impl<'a> Lexer<'a> {
     fn read_non_decimal(&mut self, kind: Kind) -> Kind {
         self.current.chars.next();
 
-        if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
+        if kind.matches_number_char(self.peek_char()) {
             self.current.chars.next();
         } else {
+            if self.is_eof() {
+                self.rewind_eof_sentinel();
+            }
             self.unexpected_err();
             return Kind::Undetermined;
         }
 
-        while let Some(c) = self.peek() {
-            match c {
-                '_' => {
+        loop {
+            match self.peek() {
+                b'_' => {
                     self.current.chars.next();
-                    if self.peek().is_some_and(|c| kind.matches_number_char(c)) {
+                    if kind.matches_number_char(self.peek_char()) {
                         self.current.chars.next();
                     } else {
                         self.unexpected_err();
                         return Kind::Undetermined;
                     }
                 }
-                c if kind.matches_number_char(c) => {
-                    self.current.chars.next();
+                _ => {
+                    if kind.matches_number_char(self.peek_char()) {
+                        self.current.chars.next();
+                    } else {
+                        break;
+                    }
                 }
-                _ => break,
             }
         }
-        if self.peek() == Some('n') {
+        if self.peek() == b'n' {
             self.current.chars.next();
         }
         self.check_after_numeric_literal(kind)
@@ -655,10 +705,10 @@ impl<'a> Lexer<'a> {
         let mut kind = Kind::Octal;
         loop {
             match self.peek() {
-                Some('0'..='7') => {
+                b'0'..=b'7' => {
                     self.current.chars.next();
                 }
-                Some('8'..='9') => {
+                b'8'..=b'9' => {
                     self.current.chars.next();
                     kind = Kind::Decimal;
                 }
@@ -668,12 +718,12 @@ impl<'a> Lexer<'a> {
 
         match self.peek() {
             // allow 08.5 and 09.5
-            Some('.') if kind == Kind::Decimal => {
+            b'.' if kind == Kind::Decimal => {
                 self.current.chars.next();
                 self.decimal_literal_after_decimal_point_after_digits()
             }
             // allow 08e1 and 09e1
-            Some('e') if kind == Kind::Decimal => {
+            b'e' if kind == Kind::Decimal => {
                 self.current.chars.next();
                 self.read_decimal_exponent()
             }
@@ -695,11 +745,11 @@ impl<'a> Lexer<'a> {
 
     fn read_decimal_exponent(&mut self) -> Kind {
         let kind = match self.peek() {
-            Some('-') => {
+            b'-' => {
                 self.current.chars.next();
                 Kind::NegativeExponential
             }
-            Some('+') => {
+            b'+' => {
                 self.current.chars.next();
                 Kind::PositiveExponential
             }
@@ -710,7 +760,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_decimal_digits(&mut self) {
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek().is_ascii_digit() {
             self.current.chars.next();
         } else {
             self.unexpected_err();
@@ -721,18 +771,18 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_decimal_digits_after_first_digit(&mut self) {
-        while let Some(c) = self.peek() {
-            match c {
-                '_' => {
+        loop {
+            match self.peek() {
+                b'_' => {
                     self.current.chars.next();
-                    if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                    if self.peek().is_ascii_digit() {
                         self.current.chars.next();
                     } else {
                         self.unexpected_err();
                         return;
                     }
                 }
-                '0'..='9' => {
+                b'0'..=b'9' => {
                     self.current.chars.next();
                 }
                 _ => break,
@@ -753,7 +803,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn optional_decimal_digits(&mut self) {
-        if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        if self.peek().is_ascii_digit() {
             self.current.chars.next();
         } else {
             return;
@@ -762,7 +812,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn optional_exponent(&mut self) -> Option<Kind> {
-        if matches!(self.peek(), Some('e' | 'E')) {
+        if matches!(self.peek(), b'e' | b'E') {
             self.current.chars.next();
             return Some(self.read_decimal_exponent());
         }
@@ -772,17 +822,16 @@ impl<'a> Lexer<'a> {
     fn check_after_numeric_literal(&mut self, kind: Kind) -> Kind {
         let offset = self.offset();
         // The SourceCharacter immediately following a NumericLiteral must not be an IdentifierStart or DecimalDigit.
-        let c = self.peek();
-        if c.is_none() || c.is_some_and(|ch| !ch.is_ascii_digit() && !is_identifier_start_all(ch)) {
+        let c = self.peek_char();
+        if !c.is_ascii_digit() && !is_identifier_start_all(c) {
             return kind;
         }
         self.current.chars.next();
-        while let Some(c) = self.peek() {
-            if is_identifier_start_all(c) {
-                self.current.chars.next();
-            } else {
+        loop {
+            if !is_identifier_start_all(self.peek_char()) {
                 break;
             }
+            self.current.chars.next();
         }
         self.error(diagnostics::InvalidNumberEnd(Span::new(offset, self.offset())));
         Kind::Undetermined
@@ -794,6 +843,11 @@ impl<'a> Lexer<'a> {
         loop {
             match self.current.chars.next() {
                 None | Some('\r' | '\n') => {
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
+                    return Kind::Undetermined;
+                }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
                     self.error(diagnostics::UnterminatedString(self.unterminated_range()));
                     return Kind::Undetermined;
                 }
@@ -837,6 +891,11 @@ impl<'a> Lexer<'a> {
                     let pattern_end = self.offset() - c.len_utf8() as u32;
                     return (pattern_end, RegExpFlags::empty());
                 }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedRegExp(self.unterminated_range()));
+                    return (self.offset(), RegExpFlags::empty());
+                }
                 Some(c) => {
                     if in_escape {
                         in_escape = false;
@@ -856,16 +915,16 @@ impl<'a> Lexer<'a> {
         let pattern_end = self.offset() - 1; // -1 to exclude `/`
         let mut flags = RegExpFlags::empty();
 
-        while let Some(ch @ ('$' | '_' | 'a'..='z' | 'A'..='Z' | '0'..='9')) = self.peek() {
+        while let b @ (b'$' | b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9') = self.peek() {
             self.current.chars.next();
-            let flag = if let Ok(flag) = RegExpFlags::try_from(ch) {
+            let flag = if let Ok(flag) = RegExpFlags::try_from(b as char) {
                 flag
             } else {
-                self.error(diagnostics::RegExpFlag(ch, self.current_offset()));
+                self.error(diagnostics::RegExpFlag(b as char, self.current_offset()));
                 continue;
             };
             if flags.contains(flag) {
-                self.error(diagnostics::RegExpFlagTwice(ch, self.current_offset()));
+                self.error(diagnostics::RegExpFlagTwice(b as char, self.current_offset()));
                 continue;
             }
             flags |= flag;
@@ -880,7 +939,7 @@ impl<'a> Lexer<'a> {
         let mut is_valid_escape_sequence = true;
         while let Some(c) = self.current.chars.next() {
             match c {
-                '$' if self.peek() == Some('{') => {
+                '$' if self.peek() == b'{' => {
                     self.save_template_string(
                         is_valid_escape_sequence,
                         builder.has_escape(),
@@ -907,6 +966,10 @@ impl<'a> Lexer<'a> {
                     let text = builder.get_mut_string_without_current_ascii_char(self);
                     self.read_string_escape_sequence(text, true, &mut is_valid_escape_sequence);
                 }
+                '\0' if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    break;
+                }
                 _ => builder.push_matching(c),
             }
         }
@@ -919,15 +982,12 @@ impl<'a> Lexer<'a> {
     ///   `JSXIdentifier` `IdentifierPart`
     ///   `JSXIdentifier` [no `WhiteSpace` or Comment here] -
     fn read_jsx_identifier(&mut self, _start_offset: u32) -> Kind {
-        while let Some(c) = self.peek() {
+        loop {
+            let c = self.peek_char();
             if c == '-' || is_identifier_start_all(c) {
                 self.current.chars.next();
-                while let Some(c) = self.peek() {
-                    if is_identifier_part(c) {
-                        self.current.chars.next();
-                    } else {
-                        break;
-                    }
+                while is_identifier_part(self.peek_char()) {
+                    self.current.chars.next();
                 }
             } else {
                 break;
@@ -944,32 +1004,32 @@ impl<'a> Lexer<'a> {
     /// { `JSXChildExpressionopt` }
     fn read_jsx_child(&mut self) -> Kind {
         match self.peek() {
-            Some('<') => {
+            b'<' => {
                 self.current.chars.next();
                 Kind::LAngle
             }
-            Some('{') => {
+            b'{' => {
                 self.current.chars.next();
                 Kind::LCurly
             }
-            Some(c) => {
+            b'\0' if self.is_eof() => Kind::Eof,
+            _ => {
+                let c = self.peek_char();
                 let mut builder = AutoCow::new(self);
                 builder.push_matching(c);
                 loop {
                     // `>` and `}` are errors in TypeScript but not Babel
                     // let's make this less strict so we can parse more code
-                    if matches!(self.peek(), Some('{' | '<')) {
+                    if matches!(self.peek(), b'{' | b'<') {
                         break;
                     }
-                    if let Some(c) = self.current.chars.next() {
-                        builder.push_matching(c);
-                    } else {
+                    if self.is_eof() {
                         break;
                     }
+                    builder.push_matching(self.consume_char());
                 }
                 Kind::JSXText
             }
-            None => Kind::Eof,
         }
     }
 
@@ -994,6 +1054,11 @@ impl<'a> Lexer<'a> {
                     }
                     builder.push_matching(c);
                 }
+                Some('\0') if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
+                    return Kind::Undetermined;
+                }
                 Some(other) => {
                     builder.push_matching(other);
                 }
@@ -1017,13 +1082,16 @@ impl<'a> Lexer<'a> {
     ) {
         let start = self.offset();
         if self.current.chars.next() != Some('u') {
+            if self.is_eof() {
+                self.rewind_eof_sentinel();
+            }
             let range = Span::new(start, self.offset());
             self.error(diagnostics::UnicodeEscapeSequence(range));
             return;
         }
 
         let value = match self.peek() {
-            Some('{') => self.unicode_code_point(),
+            b'{' => self.unicode_code_point(),
             _ => self.surrogate_pair(),
         };
 
@@ -1075,7 +1143,7 @@ impl<'a> Lexer<'a> {
         is_valid_escape_sequence: &mut bool,
     ) {
         let value = match self.peek() {
-            Some('{') => self.unicode_code_point(),
+            b'{' => self.unicode_code_point(),
             _ => self.surrogate_pair(),
         };
 
@@ -1125,10 +1193,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn hex_digit(&mut self) -> Option<u32> {
+        #[allow(clippy::cast_lossless)]
         let value = match self.peek() {
-            Some(c @ '0'..='9') => c as u32 - '0' as u32,
-            Some(c @ 'a'..='f') => 10 + (c as u32 - 'a' as u32),
-            Some(c @ 'A'..='F') => 10 + (c as u32 - 'A' as u32),
+            b @ b'0'..=b'9' => b as u32 - '0' as u32,
+            b @ b'a'..=b'f' => 10 + (b as u32 - 'a' as u32),
+            b @ b'A'..=b'F' => 10 + (b as u32 - 'A' as u32),
             _ => return None,
         };
         self.current.chars.next();
@@ -1153,10 +1222,7 @@ impl<'a> Lexer<'a> {
     fn surrogate_pair(&mut self) -> Option<SurrogatePair> {
         let high = self.hex_4_digits()?;
         // The first code unit of a surrogate pair is always in the range from 0xD800 to 0xDBFF, and is called a high surrogate or a lead surrogate.
-        if !((0xD800..=0xDBFF).contains(&high)
-            && self.peek() == Some('\\')
-            && self.peek2() == Some('u'))
-        {
+        if !((0xD800..=0xDBFF).contains(&high) && self.peek() == b'\\' && self.peek2() == b'u') {
             return Some(SurrogatePair::CodePoint(high));
         }
 
@@ -1231,7 +1297,7 @@ impl<'a> Lexer<'a> {
                     self.string_unicode_escape_sequence(text, is_valid_escape_sequence);
                 }
                 // 0 [lookahead ∉ DecimalDigit]
-                '0' if !self.peek().is_some_and(|c| c.is_ascii_digit()) => text.push('\0'),
+                '0' if !self.peek().is_ascii_digit() => text.push('\0'),
                 // Section 12.9.4 String Literals
                 // LegacyOctalEscapeSequence
                 // NonOctalDecimalEscapeSequence
@@ -1240,16 +1306,16 @@ impl<'a> Lexer<'a> {
                     num.push(a);
                     match a {
                         '4'..='7' => {
-                            if matches!(self.peek(), Some('0'..='7')) {
+                            if matches!(self.peek(), b'0'..=b'7') {
                                 let b = self.consume_char();
                                 num.push(b);
                             }
                         }
                         '0'..='3' => {
-                            if matches!(self.peek(), Some('0'..='7')) {
+                            if matches!(self.peek(), b'0'..=b'7') {
                                 let b = self.consume_char();
                                 num.push(b);
-                                if matches!(self.peek(), Some('0'..='7')) {
+                                if matches!(self.peek(), b'0'..=b'7') {
                                     let c = self.consume_char();
                                     num.push(c);
                                 }
@@ -1262,7 +1328,7 @@ impl<'a> Lexer<'a> {
                         char::from_u32(u32::from_str_radix(num.as_str(), 8).unwrap()).unwrap();
                     text.push(value);
                 }
-                '0' if in_template && self.peek().is_some_and(|c| c.is_ascii_digit()) => {
+                '0' if in_template && self.peek().is_ascii_digit() => {
                     self.current.chars.next();
                     // error raised within the parser by `diagnostics::TemplateLiteral`
                     *is_valid_escape_sequence = false;
@@ -1271,6 +1337,10 @@ impl<'a> Lexer<'a> {
                 '1'..='9' if in_template => {
                     // error raised within the parser by `diagnostics::TemplateLiteral`
                     *is_valid_escape_sequence = false;
+                }
+                '\0' if self.is_eof() => {
+                    self.rewind_eof_sentinel();
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
                 }
                 other => {
                     // NonOctalDecimalEscapeSequence \8 \9 in strict mode
@@ -1308,7 +1378,7 @@ type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 #[rustfmt::skip]
 static BYTE_HANDLERS: [ByteHandler; 256] = [
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
+    EOF, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
     ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
     SPS, EXL, QOT, HAS, IDT, PRC, AMP, QOT, PNO, PNC, ATR, PLS, COM, MIN, PRD, SLH, // 2
     ZER, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, COL, SEM, LSS, EQL, GTR, QST, // 3
@@ -1316,14 +1386,14 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
     IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, BTO, ESC, BTC, CRT, IDT, // 5
     TPL, L_A, L_B, L_C, L_D, L_E, L_F, L_G, IDT, L_I, IDT, L_K, L_L, L_M, L_N, L_O, // 6
     L_P, IDT, L_R, L_S, L_T, L_U, L_V, L_W, IDT, L_Y, IDT, BEO, PIP, BEC, TLD, ERR, // 7
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 8
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // 8
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // 9
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // A
+    UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // B
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
     UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
+    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNE, UNE, UNE, UNE, UNE, UNE, UNE, UNE, // F
 ];
 
 #[allow(clippy::unnecessary_safety_comment)]
@@ -1379,7 +1449,17 @@ macro_rules! ascii_byte_handler {
     };
 }
 
-// `\0` `\1` etc
+// `\0`: EOF sentinel or null byte
+const_assert!(EOF_SENTINEL.as_bytes()[0] == 0);
+ascii_byte_handler!(EOF(lexer) {
+    if lexer.is_eof() {
+        Kind::Eof
+    } else {
+        ERR(lexer)
+    }
+});
+
+// `\1` `\2` etc
 ascii_byte_handler!(ERR(lexer) {
     let c = lexer.consume_char();
     lexer.error(diagnostics::InvalidCharacter(c, lexer.unterminated_range()));
@@ -1529,11 +1609,11 @@ ascii_byte_handler!(PRD(lexer) {
 ascii_byte_handler!(SLH(lexer) {
     lexer.consume_char();
     match lexer.peek() {
-        Some('/') => {
+        b'/' => {
             lexer.current.chars.next();
             lexer.skip_single_line_comment()
         }
-        Some('*') => {
+        b'*' => {
             lexer.current.chars.next();
             lexer.skip_multi_line_comment()
         }
@@ -1610,9 +1690,9 @@ ascii_byte_handler!(QST(lexer) {
         } else {
             Kind::Question2
         }
-    } else if lexer.peek() == Some('.') {
+    } else if lexer.peek() == b'.' {
         // parse `?.1` as `?` `.1`
-        if lexer.peek2().is_some_and(|c| c.is_ascii_digit()) {
+        if lexer.peek2().is_ascii_digit() {
             Kind::Question
         } else {
             lexer.current.chars.next();
@@ -1874,3 +1954,7 @@ ascii_byte_handler!(L_Y(lexer) match &lexer.identifier_name_handler()[1..] {
 // NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
 #[allow(clippy::redundant_closure_for_method_calls)]
 const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
+
+// Invalid values for first byte of a UTF-8 sequence.
+// NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
+const UNE: ByteHandler = |_| unreachable!("Illegal unicode byte");

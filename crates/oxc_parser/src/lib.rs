@@ -84,9 +84,23 @@ use crate::{
     state::ParserState,
 };
 
-/// Maximum length of source in bytes which can be parsed (~4 GiB).
-// Span's start and end are u32s, so size limit is u32::MAX bytes.
-pub const MAX_LEN: usize = u32::MAX as usize;
+/// EOF sentinel added to end of source.
+/// 2 bytes long, so that `peek2()` can safely read 2 bytes without bounds check.
+const EOF_SENTINEL: &str = "\0\0";
+
+/// Maximum length of source which can be parsed (in bytes).
+/// ~4 GiB on 64-bit systems, ~2 GiB on 32-bit systems.
+// Size is constrained by 2 factors:
+// 1. `Span`'s `start` and `end` are u32s, which limits size to `u32::MAX` bytes.
+// 2. `std::alloc::Layout` used in `Parser::new` limits allocations to `isize::MAX`.
+//    Deduct the length of EOF sentinel which is added to end of source.
+pub const MAX_LEN: usize = if std::mem::size_of::<usize>() >= 8 {
+    // 64-bit systems
+    u32::MAX as usize
+} else {
+    // 32-bit or 16-bit systems
+    isize::MAX as usize - EOF_SENTINEL.len()
+};
 
 /// Return value of parser consisting of AST, errors and comments
 ///
@@ -138,15 +152,44 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Create a new parser
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(allocator: &'a Allocator, source_text: &'a str, source_type: SourceType) -> Self {
         // If source exceeds size limit, substitute a short source which will fail to parse.
         // `parse()` will convert error to `diagnostics::OverlongSource`.
-        let source_text_for_lexer = if source_text.len() > MAX_LEN { "\0" } else { source_text };
+        let is_overlong = source_text.len() > MAX_LEN;
+        let lexer_source = if is_overlong { "\u{1}" } else { source_text };
+
+        // Copy source into arena and add EOF sentinel to end.
+        // Using `allocator.alloc_layout()` to allocate arena space and raw pointers for copying,
+        // as `oxc_allocator::String` is extremely slow.
+        let len_inc_sentinel = lexer_source.len() + EOF_SENTINEL.len();
+        let layout = std::alloc::Layout::from_size_align(len_inc_sentinel, 1).unwrap();
+        let ptr = allocator.alloc_layout(layout).as_ptr();
+        // SAFETY: `lexer_source` and `EOF_SENTINEL` are valid for reads for their respective lengths.
+        // Strings have no alignment requirements.
+        // Neither source can overlap destination as we allocated destination from arena.
+        // Allocation in arena was made in 1 request for a contiguous block,
+        // `source_text` and `EOF_SENTINEL` are `&str`s and therefore valid UTF-8.
+        // Their concatenation therefore is a valid UTF-8 string too.
+        let lexer_source = unsafe {
+            std::ptr::copy_nonoverlapping(lexer_source.as_ptr(), ptr, lexer_source.len());
+            std::ptr::copy_nonoverlapping(
+                EOF_SENTINEL.as_ptr(),
+                ptr.add(lexer_source.len()),
+                EOF_SENTINEL.len(),
+            );
+            let slice = std::slice::from_raw_parts(ptr, len_inc_sentinel);
+            std::str::from_utf8_unchecked(slice)
+        };
+        // Give parser original source without EOF sentinel, referencing the same memory as lexer.
+        // If source is overlong, use original source text for error reporting.
+        let parser_source =
+            if is_overlong { source_text } else { &lexer_source[..source_text.len()] };
 
         Self {
-            lexer: Lexer::new(allocator, source_text_for_lexer, source_type),
+            lexer: Lexer::new(allocator, lexer_source, source_type),
             source_type,
-            source_text,
+            source_text: parser_source,
             errors: vec![],
             token: Token::default(),
             prev_token_end: 0,
@@ -327,38 +370,42 @@ mod test {
         }
     }
 
-    // Source with length u32::MAX + 1 fails to parse
+    // Source with length MAX_LEN + 1 fails to parse
     #[test]
     fn overlong_source() {
+        let mut source = String::with_capacity(MAX_LEN + 1);
+        while source.len() < MAX_LEN - 16 {
+            source.push_str("var x = 123456;\n");
+        }
+        while source.len() - 1 < MAX_LEN {
+            source.push('\n');
+        }
+        assert_eq!(source.len() - 1, MAX_LEN);
+
         let allocator = Allocator::default();
-        let source_type = SourceType::default();
-        let source = "var x = 123456;\n".repeat(256 * 1024 * 1024);
-        assert_eq!(source.len() - 1, u32::MAX as usize);
-        let ret = Parser::new(&allocator, &source, source_type).parse();
+        let ret = Parser::new(&allocator, &source, SourceType::default()).parse();
         assert!(ret.program.is_empty());
         assert!(ret.panicked);
         assert_eq!(ret.errors.len(), 1);
         assert_eq!(ret.errors.first().unwrap().to_string(), "Source length exceeds 4 GiB limit");
     }
 
-    // Source with length u32::MAX parses OK.
+    // Source with length MAX_LEN parses OK.
     // This test takes over 1 minute on an M1 Macbook Pro unless compiled in release mode.
     // `not(debug_assertions)` is a proxy for detecting release mode.
     #[cfg(not(debug_assertions))]
     #[test]
     fn legal_length_source() {
-        let allocator = Allocator::default();
-        let source_type = SourceType::default();
-
-        // Build a string u32::MAX bytes long which doesn't take too long to parse
+        // Build a string MAX_LEN bytes long which doesn't take too long to parse
         let head = "const x = 1;\n/*";
         let foot = "*/\nconst y = 2;\n";
-        let mut source = "x".repeat(u32::MAX as usize);
+        let mut source = "x".repeat(MAX_LEN as usize);
         source.replace_range(..head.len(), head);
         source.replace_range(source.len() - foot.len().., foot);
-        assert_eq!(source.len(), u32::MAX as usize);
+        assert_eq!(source.len(), MAX_LEN);
 
-        let ret = Parser::new(&allocator, &source, source_type).parse();
+        let allocator = Allocator::default();
+        let ret = Parser::new(&allocator, &source, SourceType::default()).parse();
         assert!(!ret.panicked);
         assert!(ret.errors.is_empty());
         assert_eq!(ret.program.body.len(), 2);
