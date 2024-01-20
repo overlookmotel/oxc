@@ -1,12 +1,10 @@
 // Copied from https://github.com/mozilla-spidermonkey/jsparagus/blob/master/crates/parser/src/lexer.rs#L2256
 
-use oxc_allocator::String;
-
 use crate::lexer::Lexer;
 
 pub struct AutoCow<'a> {
     pub start: &'a str,
-    pub value: Option<String<'a>>,
+    pub value: Option<String>,
 }
 
 impl<'a> AutoCow<'a> {
@@ -34,7 +32,7 @@ impl<'a> AutoCow<'a> {
     pub fn get_mut_string_without_current_ascii_char<'b>(
         &'b mut self,
         lexer: &Lexer<'a>,
-    ) -> &'b mut String<'a> {
+    ) -> &'b mut String {
         self.force_allocation_without_current_ascii_char(lexer);
         self.value.as_mut().unwrap()
     }
@@ -44,10 +42,7 @@ impl<'a> AutoCow<'a> {
         if self.value.is_some() {
             return;
         }
-        self.value = Some(String::from_str_in(
-            &self.start[..self.start.len() - lexer.remaining().len() - 1],
-            lexer.allocator,
-        ));
+        self.value = Some(self.start[..self.start.len() - lexer.remaining().len() - 1].to_string());
     }
 
     // Check if the string contains a different character, such as an escape sequence
@@ -57,7 +52,7 @@ impl<'a> AutoCow<'a> {
 
     pub fn finish(mut self, lexer: &Lexer<'a>) -> &'a str {
         match self.value.take() {
-            Some(s) => s.into_bump_str(),
+            Some(s) => lexer.allocator.alloc_str(&s),
             None => &self.start[..self.start.len() - lexer.remaining().len()],
         }
     }
@@ -65,7 +60,7 @@ impl<'a> AutoCow<'a> {
     // Just like finish, but without pushing current char.
     pub fn finish_without_push(mut self, lexer: &Lexer<'a>) -> &'a str {
         match self.value.take() {
-            Some(s) => s.into_bump_str(),
+            Some(s) => lexer.allocator.alloc_str(&s),
             None => &self.start[..self.start.len() - lexer.remaining().len() - 1],
         }
     }
