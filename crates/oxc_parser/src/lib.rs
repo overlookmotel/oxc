@@ -84,8 +84,9 @@ use crate::{
     state::ParserState,
 };
 
-/// EOF sentinel added to end of source
-pub(crate) const EOF_SENTINEL: &str = "\0";
+/// EOF sentinel added to end of source.
+/// 2 bytes long, so that `peek2()` can safely read 2 bytes without bounds check.
+const EOF_SENTINEL: &str = "\0\0";
 
 /// Maximum length of source which can be parsed (in bytes).
 /// ~4 GiB on 64-bit systems, ~2 GiB on 32-bit systems.
