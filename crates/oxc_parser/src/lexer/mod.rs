@@ -1296,35 +1296,160 @@ enum SurrogatePair {
 /// * Lexer must not be at end of file.
 /// * `byte` must be next byte of source code, corresponding to current position
 ///   of `lexer.current.chars`.
-/// * Only `BYTE_HANDLERS` for ASCII characters may use the `ascii_byte_handler!()` macro.
+/// * Only byte handlers for ASCII characters may use the `ascii_byte_handler!()` macro.
 unsafe fn handle_byte(byte: u8, lexer: &mut Lexer) -> Kind {
-    BYTE_HANDLERS[byte as usize](lexer)
+    let index = BYTE_HANDLER_INDEXES[byte as usize];
+    let handler = BYTE_HANDLERS.get_unchecked(index as usize);
+    handler(lexer)
 }
 
 type ByteHandler = fn(&mut Lexer<'_>) -> Kind;
 
-/// Lookup table mapping any incoming byte to a handler function defined below.
-/// <https://github.com/ratel-rust/ratel-core/blob/master/ratel/src/lexer/mod.rs>
-#[rustfmt::skip]
-const BYTE_HANDLERS: [ByteHandler; 256] = [
-//  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
-    ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
-    SPS, EXL, QOT, HAS, IDT, PRC, AMP, QOT, PNO, PNC, ATR, PLS, COM, MIN, PRD, SLH, // 2
-    ZER, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, COL, SEM, LSS, EQL, GTR, QST, // 3
-    AT_, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, // 4
-    IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, BTO, ESC, BTC, CRT, IDT, // 5
-    TPL, L_A, L_B, L_C, L_D, L_E, L_F, L_G, IDT, L_I, IDT, L_K, L_L, L_M, L_N, L_O, // 6
-    L_P, IDT, L_R, L_S, L_T, L_U, L_V, L_W, IDT, L_Y, IDT, BEO, PIP, BEC, TLD, ERR, // 7
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 8
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
-    UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
-];
+mod byte_handlers {
+    /// Lookup table mapping any incoming byte to a handler function defined below.
+    /// <https://github.com/ratel-rust/ratel-core/blob/master/ratel/src/lexer/mod.rs>
+    #[rustfmt::skip]
+    pub const BYTE_HANDLER_INDEXES: [u8; 256] = [
+    //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    //
+        ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, SPS, LIN, SPS, SPS, LIN, ERR, ERR, // 0
+        ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, ERR, // 1
+        SPS, EXL, QOT, HAS, IDT, PRC, AMP, QOT, PNO, PNC, ATR, PLS, COM, MIN, PRD, SLH, // 2
+        ZER, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, DIG, COL, SEM, LSS, EQL, GTR, QST, // 3
+        AT_, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, // 4
+        IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, IDT, BTO, ESC, BTC, CRT, IDT, // 5
+        TPL, L_A, L_B, L_C, L_D, L_E, L_F, L_G, IDT, L_I, IDT, L_K, L_L, L_M, L_N, L_O, // 6
+        L_P, IDT, L_R, L_S, L_T, L_U, L_V, L_W, IDT, L_Y, IDT, BEO, PIP, BEC, TLD, ERR, // 7
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 8
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // 9
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // A
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // B
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // C
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // D
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // E
+        UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, UNI, // F
+    ];
+
+    const ERR: u8 = 0;
+    const SPS: u8 = 1;
+    const LIN: u8 = 2;
+    const EXL: u8 = 3;
+    const QOT: u8 = 4;
+    const HAS: u8 = 5;
+    const IDT: u8 = 6;
+    const PRC: u8 = 7;
+    const AMP: u8 = 8;
+    const PNO: u8 = 9;
+    const PNC: u8 = 10;
+    const ATR: u8 = 11;
+    const PLS: u8 = 12;
+    const COM: u8 = 13;
+    const MIN: u8 = 14;
+    const PRD: u8 = 15;
+    const SLH: u8 = 16;
+    const ZER: u8 = 17;
+    const DIG: u8 = 18;
+    const COL: u8 = 19;
+    const SEM: u8 = 20;
+    const LSS: u8 = 21;
+    const EQL: u8 = 22;
+    const GTR: u8 = 23;
+    const QST: u8 = 24;
+    const AT_: u8 = 25;
+    const BTO: u8 = 26;
+    const ESC: u8 = 27;
+    const BTC: u8 = 28;
+    const CRT: u8 = 29;
+    const TPL: u8 = 30;
+    const L_A: u8 = 31;
+    const L_B: u8 = 32;
+    const L_C: u8 = 33;
+    const L_D: u8 = 34;
+    const L_E: u8 = 35;
+    const L_F: u8 = 36;
+    const L_G: u8 = 37;
+    const L_I: u8 = 38;
+    const L_K: u8 = 39;
+    const L_L: u8 = 40;
+    const L_M: u8 = 41;
+    const L_N: u8 = 42;
+    const L_O: u8 = 43;
+    const L_P: u8 = 44;
+    const L_R: u8 = 45;
+    const L_S: u8 = 46;
+    const L_T: u8 = 47;
+    const L_U: u8 = 48;
+    const L_V: u8 = 49;
+    const L_W: u8 = 50;
+    const L_Y: u8 = 51;
+    const BEO: u8 = 52;
+    const PIP: u8 = 53;
+    const BEC: u8 = 54;
+    const TLD: u8 = 55;
+    const UNI: u8 = 56;
+
+    use super::ByteHandler;
+    pub const BYTE_HANDLERS: [ByteHandler; 57] = {
+        let mut handlers = [super::ERR; 57];
+        handlers[SPS as usize] = super::SPS;
+        handlers[LIN as usize] = super::LIN;
+        handlers[EXL as usize] = super::EXL;
+        handlers[QOT as usize] = super::QOT;
+        handlers[HAS as usize] = super::HAS;
+        handlers[IDT as usize] = super::IDT;
+        handlers[PRC as usize] = super::PRC;
+        handlers[AMP as usize] = super::AMP;
+        handlers[PNO as usize] = super::PNO;
+        handlers[PNC as usize] = super::PNC;
+        handlers[ATR as usize] = super::ATR;
+        handlers[PLS as usize] = super::PLS;
+        handlers[COM as usize] = super::COM;
+        handlers[MIN as usize] = super::MIN;
+        handlers[PRD as usize] = super::PRD;
+        handlers[SLH as usize] = super::SLH;
+        handlers[ZER as usize] = super::ZER;
+        handlers[DIG as usize] = super::DIG;
+        handlers[COL as usize] = super::COL;
+        handlers[SEM as usize] = super::SEM;
+        handlers[LSS as usize] = super::LSS;
+        handlers[EQL as usize] = super::EQL;
+        handlers[GTR as usize] = super::GTR;
+        handlers[QST as usize] = super::QST;
+        handlers[AT_ as usize] = super::AT_;
+        handlers[BTO as usize] = super::BTO;
+        handlers[ESC as usize] = super::ESC;
+        handlers[BTC as usize] = super::BTC;
+        handlers[CRT as usize] = super::CRT;
+        handlers[TPL as usize] = super::TPL;
+        handlers[L_A as usize] = super::L_A;
+        handlers[L_B as usize] = super::L_B;
+        handlers[L_C as usize] = super::L_C;
+        handlers[L_D as usize] = super::L_D;
+        handlers[L_E as usize] = super::L_E;
+        handlers[L_F as usize] = super::L_F;
+        handlers[L_G as usize] = super::L_G;
+        handlers[L_I as usize] = super::L_I;
+        handlers[L_K as usize] = super::L_K;
+        handlers[L_L as usize] = super::L_L;
+        handlers[L_M as usize] = super::L_M;
+        handlers[L_N as usize] = super::L_N;
+        handlers[L_O as usize] = super::L_O;
+        handlers[L_P as usize] = super::L_P;
+        handlers[L_R as usize] = super::L_R;
+        handlers[L_S as usize] = super::L_S;
+        handlers[L_T as usize] = super::L_T;
+        handlers[L_U as usize] = super::L_U;
+        handlers[L_V as usize] = super::L_V;
+        handlers[L_W as usize] = super::L_W;
+        handlers[L_Y as usize] = super::L_Y;
+        handlers[BEO as usize] = super::BEO;
+        handlers[PIP as usize] = super::PIP;
+        handlers[BEC as usize] = super::BEC;
+        handlers[TLD as usize] = super::TLD;
+        handlers[UNI as usize] = super::UNI;
+        handlers
+    };
+}
+use byte_handlers::{BYTE_HANDLERS, BYTE_HANDLER_INDEXES};
 
 #[allow(clippy::unnecessary_safety_comment)]
 /// Macro for defining byte handler for an ASCII character.
@@ -1366,7 +1491,7 @@ const BYTE_HANDLERS: [ByteHandler; 256] = [
 /// ```
 macro_rules! ascii_byte_handler {
     ($id:ident($lex:ident) $body:expr) => {
-        const $id: ByteHandler = |$lex| {
+        pub(crate) const $id: ByteHandler = |$lex| {
             // SAFETY: This macro is only used for ASCII characters
             unsafe {
                 use ::assert_unchecked::assert_unchecked;
