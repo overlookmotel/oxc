@@ -1491,7 +1491,7 @@ use byte_handlers::{BYTE_HANDLERS, BYTE_HANDLER_INDEXES};
 /// ```
 macro_rules! ascii_byte_handler {
     ($id:ident($lex:ident) $body:expr) => {
-        pub(crate) const $id: ByteHandler = |$lex| {
+        const $id: ByteHandler = |$lex| {
             // SAFETY: This macro is only used for ASCII characters
             unsafe {
                 use ::assert_unchecked::assert_unchecked;
