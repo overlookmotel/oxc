@@ -275,24 +275,18 @@ impl<'a> Lexer<'a> {
     /// Consume the current char
     #[inline]
     fn consume_char(&mut self) -> char {
-        // SAFETY: `chars` iterator can never reach end as we stop at the EOF sentinel
-        unsafe { assert_unchecked!(self.current.chars.as_str().len() >= EOF_SENTINEL.len()) };
         self.current.chars.next().unwrap()
     }
 
     /// Peek the next char without advancing the position
     #[inline]
     fn peek(&self) -> Option<char> {
-        // SAFETY: `chars` iterator can never reach end as we stop at the EOF sentinel
-        unsafe { assert_unchecked!(self.current.chars.as_str().len() >= EOF_SENTINEL.len()) };
         self.current.chars.clone().next()
     }
 
     /// Peek the next next char without advancing the position
     #[inline]
     fn peek2(&self) -> Option<char> {
-        // SAFETY: `chars` iterator can never reach end as we stop at the EOF sentinel
-        unsafe { assert_unchecked!(self.current.chars.as_str().len() >= EOF_SENTINEL.len()) };
         let mut chars = self.current.chars.clone();
         chars.next();
         chars.next()
@@ -301,8 +295,6 @@ impl<'a> Lexer<'a> {
     /// Peek the next character, and advance the current position if it matches
     #[inline]
     fn next_eq(&mut self, c: char) -> bool {
-        // SAFETY: `chars` iterator can never reach end as we stop at the EOF sentinel
-        unsafe { assert_unchecked!(self.current.chars.as_str().len() >= EOF_SENTINEL.len()) };
         let matched = self.peek() == Some(c);
         if matched {
             self.current.chars.next();
