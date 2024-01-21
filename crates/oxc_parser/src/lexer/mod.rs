@@ -12,7 +12,10 @@ mod token;
 mod trivia_builder;
 
 use rustc_hash::FxHashMap;
-use std::{collections::VecDeque, str::Chars};
+use std::{
+    collections::VecDeque,
+    str::{Bytes, Chars},
+};
 
 use oxc_allocator::{Allocator, String};
 use oxc_ast::ast::RegExpFlags;
@@ -20,8 +23,10 @@ use oxc_diagnostics::Error;
 use oxc_span::{SourceType, Span};
 use oxc_syntax::{
     identifier::{
-        is_identifier_part, is_identifier_start_all, is_irregular_line_terminator,
-        is_irregular_whitespace, is_line_terminator, CR, FF, LF, LS, PS, TAB, VT,
+        is_identifier_part, is_identifier_part_ascii_byte, is_identifier_part_unicode,
+        is_identifier_start_all, is_identifier_start_ascii_byte, is_identifier_start_unicode,
+        is_irregular_line_terminator, is_irregular_whitespace, is_line_terminator, CR, FF, LF, LS,
+        PS, TAB, VT,
     },
     unicode_id_start::is_id_start_unicode,
 };
@@ -393,10 +398,10 @@ impl<'a> Lexer<'a> {
         let c = self.current.chars.clone().next().unwrap();
         match c {
             c if is_id_start_unicode(c) => {
-                let mut builder = AutoCow::new(self);
-                let c = self.consume_char();
-                builder.push_matching(c);
-                self.identifier_name(builder);
+                let mut chars = self.current.chars.clone();
+                chars.next();
+                let bytes = chars.as_str().bytes();
+                self.identifier_tail_after_no_escape(bytes);
                 Kind::Ident
             }
             c if is_irregular_whitespace(c) => {
@@ -462,35 +467,204 @@ impl<'a> Lexer<'a> {
     }
 
     /// Section 12.7.1 Identifier Names
-    fn identifier_tail(&mut self, mut builder: AutoCow<'a>) -> &'a str {
-        // ident tail
-        while let Some(c) = self.peek() {
-            if !is_identifier_part(c) {
-                if c == '\\' {
-                    self.current.chars.next();
-                    builder.force_allocation_without_current_ascii_char(self);
-                    self.identifier_unicode_escape_sequence(&mut builder, false);
-                    continue;
-                }
-                break;
+
+    /// Handle identifier with ASCII start character.
+    /// Start character should not be consumed from `self.current.chars` prior to calling this.
+    fn identifier_name_handler(&mut self) -> &'a str {
+        // `bytes` skip the character already identified as ASCII
+        let bytes = self.remaining()[1..].bytes();
+        self.identifier_tail_after_no_escape(bytes)
+    }
+
+    /// Handle identifier after 1st char dealt with.
+    /// 1st char can have been ASCII or Unicode, but cannot have been a `\` escape.
+    /// 1st character should not be consumed from `self.current.chars` prior to calling this,
+    /// but `bytes` iterator should be positioned *after* 1st char.
+    // `#[inline]` because we want this inlined into `identifier_name_handler`,
+    // which is the fast path for common cases.
+    #[inline]
+    fn identifier_tail_after_no_escape(&mut self, mut bytes: Bytes<'a>) -> &'a str {
+        // Find first byte which isn't valid ASCII identifier part
+        let next_byte = match self.identifier_consume_ascii_identifier_bytes(&mut bytes) {
+            Some(b) => b,
+            None => {
+                return self.identifier_eof();
             }
-            self.current.chars.next();
-            builder.push_matching(c);
+        };
+
+        // Handle the byte which isn't ASCII identifier part.
+        // Most likely we're at the end of the identifier, but handle `\` escape and Unicode chars.
+        // Fast path for normal ASCII identifiers, by marking the 2 uncommon cases `#[cold]`.
+        if next_byte == b'\\' {
+            self.identifier_after_backslash(bytes, false)
+        } else if !next_byte.is_ascii() {
+            self.identifier_tail_after_unicode_byte(bytes)
+        } else {
+            // End of identifier found.
+            // Advance chars iterator to the byte we just found which isn't part of the identifier.
+            self.identifier_end(&bytes)
         }
-        let has_escape = builder.has_escape();
-        let text = builder.finish(self);
-        self.save_string(has_escape, text);
+    }
+
+    /// Consume bytes from `Bytes` iterator which are ASCII identifier part bytes.
+    /// `bytes` iterator is left positioned on next non-matching byte.
+    /// Returns next non-matching byte, or `None` if EOF.
+    // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
+    // which is on the fast path for common cases.
+    #[inline]
+    fn identifier_consume_ascii_identifier_bytes(&mut self, bytes: &mut Bytes<'a>) -> Option<u8> {
+        loop {
+            match bytes.clone().next() {
+                Some(b) => {
+                    if !is_identifier_part_ascii_byte(b) {
+                        return Some(b);
+                    }
+                    bytes.next();
+                }
+                None => {
+                    return None;
+                }
+            }
+        }
+    }
+
+    /// End of identifier found.
+    /// `bytes` iterator must be positioned on next byte after end of identifier.
+    // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
+    // which is on the fast path for common cases.
+    #[inline]
+    fn identifier_end(&mut self, bytes: &Bytes) -> &'a str {
+        // TODO: Could do this unchecked.
+        // This fn would have to become unsafe, with proviso that `bytes` is on a UTF-8 boundary.
+        // ```
+        // let index = remaining.len() - bytes.len();
+        // self.current.chars = self.remaining().get_unchecked(index..);
+        // &self.remaining().get_unchecked(0..index)
+        // ```
+        let len = self.remaining().len() - bytes.len();
+        let (text, remaining) = self.remaining().split_at(len);
+        self.current.chars = remaining.chars();
         text
     }
 
-    fn identifier_name(&mut self, builder: AutoCow<'a>) -> &'a str {
-        self.identifier_tail(builder)
+    /// Identifier end at EOF.
+    /// Return text of identifier, and advance `self.current.chars` to end of file.
+    // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
+    // which is on the fast path for common cases.
+    // TODO: Make this cold? EOF only happens once.
+    // Otherwise, remove it, and replace uses of it with `identifier_end()`.
+    #[inline]
+    fn identifier_eof(&mut self) -> &'a str {
+        let text = self.remaining();
+        self.current.chars = text[text.len()..].chars();
+        text
     }
 
-    fn identifier_name_handler(&mut self) -> &'a str {
-        let builder = AutoCow::new(self);
-        self.consume_char();
-        self.identifier_name(builder)
+    /// Handle continuation of identifier after 1st byte of a multi-byte unicode char found.
+    /// Any number of characters can have already been eaten from `bytes` iterator prior to it.
+    /// `bytes` iterator should be positioned at start of Unicode character.
+    /// Nothing should have been consumed from `self.current.chars` prior to calling this.
+    #[cold]
+    fn identifier_tail_after_unicode_byte(&mut self, mut bytes: Bytes<'a>) -> &'a str {
+        let is_identifier_part =
+            self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
+        if is_identifier_part {
+            let at_end = self.identifier_consume_until_end_or_escape(&mut bytes);
+            if !at_end {
+                return self.identifier_after_backslash(bytes, false);
+            }
+        }
+
+        self.identifier_end(&bytes)
+    }
+
+    /// Consume valid identifier bytes (ASCII or Unicode) from `bytes`
+    /// until reach end of identifier or a `\`.
+    /// Returns `true` if at end of identifier, or `false` if found `\`.
+    fn identifier_consume_until_end_or_escape(&mut self, bytes: &mut Bytes<'a>) -> bool {
+        loop {
+            // Eat ASCII chars from `bytes`
+            let next_byte = match self.identifier_consume_ascii_identifier_bytes(bytes) {
+                Some(b) => b,
+                None => {
+                    return true;
+                }
+            };
+
+            if next_byte.is_ascii() {
+                return next_byte != b'\\';
+            }
+
+            // Unicode char
+            let is_identifier_part = self.identifier_consume_unicode_char_if_identifier_part(bytes);
+            if !is_identifier_part {
+                return true;
+            }
+            // Char was part of identifier. Go round again.
+        }
+    }
+
+    /// Consume unicode character from `bytes` if it's part of identifier.
+    /// Returns `true` if consumed a char, `false` if not.
+    fn identifier_consume_unicode_char_if_identifier_part(&self, bytes: &mut Bytes<'a>) -> bool {
+        let mut chars = self.source[self.source.len() - bytes.len()..].chars();
+        let c = chars.next().unwrap();
+        if !is_identifier_part_unicode(c) {
+            return false;
+        }
+        // Advance `bytes` iterator past this character
+        *bytes = chars.as_str().bytes();
+        true
+    }
+
+    /// Handle identifier after a `\` found.
+    /// Any number of characters can have been eaten from `bytes` iterator prior to the `\`.
+    /// `\` byte must not have been eaten from `bytes`.
+    /// Nothing should have been consumed from `self.current.chars` prior to calling this.
+    #[cold]
+    fn identifier_after_backslash(
+        &mut self,
+        mut bytes: Bytes<'a>,
+        check_identifier_start: bool,
+    ) -> &'a str {
+        // We don't know how many characters yet to come.
+        // Guess that same amount again or 16 minimum.
+        const MIN_LEN: usize = 16;
+        let len = self.remaining().len() - bytes.len();
+        let capacity = (len * 2).min(MIN_LEN);
+        let mut str = String::with_capacity_in(capacity, self.allocator);
+
+        // TODO: Add a more performant `push_str()` method to `oxc_allocator::String`
+
+        loop {
+            // Add bytes before this escape to `str` and advance `chars` iterator to after the `\`
+            let len = self.remaining().len() - bytes.len();
+            str.push_str(&self.remaining()[0..len]);
+            self.current.chars = self.remaining()[len + 1..].chars();
+
+            // Consume escape sequence from `chars` and add char to `str`
+            self.identifier_unicode_escape_sequence(&mut str, check_identifier_start);
+
+            // Bring `bytes` iterator back into sync with `chars` iterator.
+            // i.e. advance `bytes` to after the escape sequence.
+            bytes = self.remaining().bytes();
+
+            // Consume bytes until reach end of identifier or another escape
+            let at_end = self.identifier_consume_until_end_or_escape(&mut bytes);
+            if at_end {
+                break;
+            }
+            // Found another `\` escape
+        }
+
+        // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier
+        let last_chunk = self.identifier_end(&bytes);
+        str.push_str(last_chunk);
+
+        // Convert to arena slice and save to `escaped_strings`
+        let text = str.into_bump_str();
+        self.save_string(true, text);
+        text
     }
 
     /// Section 12.8 Punctuators
@@ -568,31 +742,49 @@ impl<'a> Lexer<'a> {
     }
 
     fn private_identifier(&mut self) -> Kind {
-        let mut builder = AutoCow::new(self);
-        let start = self.offset();
-        match self.current.chars.next() {
-            Some(c) if is_identifier_start_all(c) => {
-                builder.push_matching(c);
+        let mut bytes = self.remaining().bytes();
+        if let Some(b) = bytes.clone().next() {
+            if is_identifier_start_ascii_byte(b) {
+                // Consume byte from `bytes`
+                bytes.next();
+                self.identifier_tail_after_no_escape(bytes);
+                Kind::PrivateIdentifier
+            } else {
+                // Do not consume byte from `bytes`
+                self.private_identifier_not_ascii_id(bytes)
             }
-            Some('\\') => {
-                builder.force_allocation_without_current_ascii_char(self);
-                self.identifier_unicode_escape_sequence(&mut builder, true);
-            }
-            Some(c) => {
-                #[allow(clippy::cast_possible_truncation)]
-                self.error(diagnostics::InvalidCharacter(
-                    c,
-                    Span::new(start, start + c.len_utf8() as u32),
-                ));
-                return Kind::Undetermined;
-            }
-            None => {
-                self.error(diagnostics::UnexpectedEnd(Span::new(start, start)));
-                return Kind::Undetermined;
-            }
+        } else {
+            let start = self.offset();
+            self.error(diagnostics::UnexpectedEnd(Span::new(start, start)));
+            Kind::Undetermined
         }
-        self.identifier_tail(builder);
-        Kind::PrivateIdentifier
+    }
+
+    #[cold]
+    fn private_identifier_not_ascii_id(&mut self, bytes: Bytes<'a>) -> Kind {
+        let b = bytes.clone().next().unwrap();
+        if b == b'\\' {
+            // `\` byte has not been eaten from `bytes`
+            self.identifier_after_backslash(bytes, true);
+            return Kind::PrivateIdentifier;
+        }
+
+        if !b.is_ascii() {
+            let c = self.peek().unwrap();
+            if is_identifier_start_unicode(c) {
+                // Eat char from `bytes` (but not from `self.current.chars`)
+                let mut chars = self.current.chars.clone();
+                chars.next();
+                let bytes = chars.as_str().bytes();
+                self.identifier_tail_after_no_escape(bytes);
+                return Kind::PrivateIdentifier;
+            }
+        };
+
+        let start = self.offset();
+        let c = self.consume_char();
+        self.error(diagnostics::InvalidCharacter(c, Span::new(start, self.offset())));
+        Kind::Undetermined
     }
 
     /// 12.9.3 Numeric Literals with `0` prefix
@@ -1010,7 +1202,7 @@ impl<'a> Lexer<'a> {
     ///   \u{ `CodePoint` }
     fn identifier_unicode_escape_sequence(
         &mut self,
-        builder: &mut AutoCow<'a>,
+        str: &mut String,
         check_identifier_start: bool,
     ) {
         let start = self.offset();
@@ -1060,7 +1252,7 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        builder.push_different(ch);
+        str.push(ch);
     }
 
     /// String `UnicodeEscapeSequence`
@@ -1635,11 +1827,9 @@ ascii_byte_handler!(BTO(lexer) {
 
 // \
 ascii_byte_handler!(ESC(lexer) {
-    let mut builder = AutoCow::new(lexer);
-    lexer.consume_char();
-    builder.force_allocation_without_current_ascii_char(lexer);
-    lexer.identifier_unicode_escape_sequence(&mut builder, true);
-    let text = lexer.identifier_name(builder);
+    // `bytes` iterator positioned on `\`
+    let bytes = lexer.remaining().bytes();
+    let text = lexer.identifier_after_backslash(bytes, true);
     Kind::match_keyword(text)
 });
 

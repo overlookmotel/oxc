@@ -85,9 +85,31 @@ pub const ASCII_CONTINUE: Align64<[bool; 128]> = Align64([
     F, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, F, F, F, F, F,
 ]);
 
+const fn extend_to_256_len(src: &Align64<[bool; 128]>) -> Align64<[bool; 256]> {
+    let mut dst = Align64([false; 256]);
+    let mut i = 0;
+    while i < src.0.len() {
+        dst.0[i] = src.0[i];
+        i += 1;
+    }
+    dst
+}
+pub const ASCII_START_BYTE: Align64<[bool; 256]> = extend_to_256_len(&ASCII_START);
+pub const ASCII_CONTINUE_BYTE: Align64<[bool; 256]> = extend_to_256_len(&ASCII_CONTINUE);
+
 #[inline]
 pub fn is_identifier_start_ascii(c: char) -> bool {
     ASCII_START.0[c as usize]
+}
+
+#[inline]
+pub fn is_identifier_start_ascii_byte(b: u8) -> bool {
+    ASCII_START_BYTE.0[b as usize]
+}
+
+#[inline]
+pub fn is_identifier_start_unicode(c: char) -> bool {
+    is_id_start_unicode(c)
 }
 
 /// Section 12.7 Detect `IdentifierStartChar`
@@ -96,7 +118,22 @@ pub fn is_identifier_start_all(c: char) -> bool {
     if c.is_ascii() {
         return is_identifier_start_ascii(c);
     }
-    is_id_start_unicode(c)
+    is_identifier_start_unicode(c)
+}
+
+#[inline]
+pub fn is_identifier_part_ascii(c: char) -> bool {
+    ASCII_CONTINUE.0[c as usize]
+}
+
+#[inline]
+pub fn is_identifier_part_ascii_byte(b: u8) -> bool {
+    ASCII_CONTINUE_BYTE.0[b as usize]
+}
+
+#[inline]
+pub fn is_identifier_part_unicode(c: char) -> bool {
+    is_id_continue_unicode(c) || c == ZWNJ || c == ZWJ
 }
 
 /// Section 12.7 Detect `IdentifierPartChar`
@@ -104,9 +141,9 @@ pub fn is_identifier_start_all(c: char) -> bool {
 #[inline]
 pub fn is_identifier_part(c: char) -> bool {
     if c.is_ascii() {
-        return ASCII_CONTINUE.0[c as usize];
+        return is_identifier_part_ascii(c);
     }
-    is_id_continue_unicode(c) || c == ZWNJ || c == ZWJ
+    is_identifier_part_unicode(c)
 }
 
 pub fn is_identifier_name(name: &str) -> bool {
