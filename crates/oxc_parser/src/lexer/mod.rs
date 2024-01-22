@@ -597,7 +597,7 @@ impl<'a> Lexer<'a> {
             if at_end {
                 return true;
             }
-            // Char was part of identifier. Go round again.
+            // Char was part of identifier. Keep eating.
         }
     }
 
