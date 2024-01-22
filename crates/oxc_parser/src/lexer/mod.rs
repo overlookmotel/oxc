@@ -579,7 +579,6 @@ impl<'a> Lexer<'a> {
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
     // `#[cold]` to guide branch predictor that Unicode chars in identifiers are rare.
     #[cold]
-    #[inline(never)]
     fn identifier_tail_after_unicode_byte(&mut self, mut bytes: Bytes<'a>) -> &'a str {
         let at_end = self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
         if !at_end {
@@ -643,7 +642,6 @@ impl<'a> Lexer<'a> {
     // `#[cold]` to guide branch predictor that escapes in identifiers are rare and keep a fast path
     // in `identifier_tail_after_no_escape` for the common case.
     #[cold]
-    #[inline(never)]
     fn identifier_after_backslash(
         &mut self,
         mut bytes: Bytes<'a>,
