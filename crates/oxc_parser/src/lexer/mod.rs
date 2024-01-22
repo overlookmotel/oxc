@@ -474,6 +474,7 @@ impl<'a> Lexer<'a> {
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
     /// SAFETY: Next char in `self.current.chars` must be ASCII.
     /// TODO: Can we get a gain by avoiding returning slice if it's not used (IDT handler)?
+    #[inline(always)]
     unsafe fn identifier_name_handler(&mut self) -> &'a str {
         // `bytes` skip the character which caller guarantees is ASCII
         let bytes = self.remaining().get_unchecked(1..).bytes();
@@ -492,7 +493,7 @@ impl<'a> Lexer<'a> {
     /// but `bytes` iterator should be positioned *after* 1st char.
     // `#[inline]` because we want this inlined into `identifier_name_handler`,
     // which is the fast path for common cases.
-    #[inline]
+    #[inline(always)]
     fn identifier_tail_after_no_escape(&mut self, mut bytes: Bytes<'a>) -> &'a str {
         // Find first byte which isn't valid ASCII identifier part
         let next_byte = match self.identifier_consume_ascii_identifier_bytes(&mut bytes) {
@@ -521,7 +522,7 @@ impl<'a> Lexer<'a> {
     /// Returns next non-matching byte, or `None` if EOF.
     // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
     // which is on the fast path for common cases.
-    #[inline]
+    #[inline(always)]
     fn identifier_consume_ascii_identifier_bytes(&mut self, bytes: &mut Bytes<'a>) -> Option<u8> {
         loop {
             match bytes.clone().next() {
@@ -542,7 +543,7 @@ impl<'a> Lexer<'a> {
     /// `bytes` iterator must be positioned on next byte after end of identifier.
     // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
     // which is on the fast path for common cases.
-    #[inline]
+    #[inline(always)]
     fn identifier_end(&mut self, bytes: &Bytes) -> &'a str {
         // TODO: Could do this unchecked.
         // This fn would have to become unsafe, with proviso that `bytes` is on a UTF-8 boundary.
@@ -1600,6 +1601,7 @@ macro_rules! ascii_byte_handler {
 macro_rules! ascii_identifier_handler {
     ($id:ident($lex:ident, $id_handler:ident) $body:expr) => {
         const $id: ByteHandler = |$lex| {
+            #[inline(always)]
             fn $id_handler<'a>(lexer: &mut Lexer<'a>) -> &'a str {
                 // SAFETY: This macro is only used for ASCII characters
                 unsafe { lexer.identifier_name_handler() }
