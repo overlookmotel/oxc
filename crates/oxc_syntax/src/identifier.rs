@@ -101,13 +101,12 @@ pub static ASCII_CONTINUE: Align64<[bool; 128]> = Align64([
 #[inline]
 pub fn is_identifier_start(c: char) -> bool {
     if c.is_ascii() {
-        return is_identifier_start_ascii(c);
+        return ASCII_START.0[c as usize];
     }
     is_identifier_start_unicode(c)
 }
 
-#[allow(clippy::inline_always)]
-#[inline(always)]
+#[inline]
 pub fn is_identifier_start_ascii(c: char) -> bool {
     ASCII_START.0[c as usize]
 }
@@ -122,13 +121,12 @@ pub fn is_identifier_start_unicode(c: char) -> bool {
 #[inline]
 pub fn is_identifier_part(c: char) -> bool {
     if c.is_ascii() {
-        return is_identifier_part_ascii(c);
+        return ASCII_CONTINUE.0[c as usize];
     }
     is_identifier_part_unicode(c)
 }
 
-#[allow(clippy::inline_always)]
-#[inline(always)]
+#[inline]
 pub fn is_identifier_part_ascii(c: char) -> bool {
     ASCII_CONTINUE.0[c as usize]
 }
