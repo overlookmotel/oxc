@@ -578,7 +578,7 @@ impl<'a> Lexer<'a> {
     /// Consume valid identifier bytes (ASCII or Unicode) from `bytes`
     /// until reach end of identifier or a `\`.
     /// Returns `true` if at end of identifier, or `false` if found `\`.
-    fn identifier_consume_until_end_or_escape(&mut self, bytes: &mut Bytes<'a>) -> bool {
+    fn identifier_tail_consume_until_end_or_escape(&mut self, bytes: &mut Bytes<'a>) -> bool {
         loop {
             // Eat ASCII chars from `bytes`
             let next_byte = match self.identifier_consume_ascii_identifier_bytes(bytes) {
@@ -663,7 +663,7 @@ impl<'a> Lexer<'a> {
             bytes = self.remaining().bytes();
 
             // Consume bytes until reach end of identifier or another escape
-            let at_end = self.identifier_consume_until_end_or_escape(&mut bytes);
+            let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if at_end {
                 break;
             }
