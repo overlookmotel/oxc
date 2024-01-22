@@ -395,11 +395,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn unicode_char_handler(&mut self) -> Kind {
-        let c = self.current.chars.clone().next().unwrap();
+        let mut chars = self.current.chars.clone();
+        let c = chars.next().unwrap();
         match c {
             c if is_id_start_unicode(c) => {
-                let mut chars = self.current.chars.clone();
-                chars.next();
+                // `bytes` is positioned after this char
                 let bytes = chars.as_str().bytes();
                 self.identifier_tail_after_no_escape(bytes);
                 Kind::Ident
