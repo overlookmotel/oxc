@@ -1,4 +1,5 @@
-use unicode_id_start::{is_id_continue_unicode, is_id_start_unicode};
+use unicode_id_start::is_id_continue_unicode;
+pub use unicode_id_start::is_id_start_unicode as is_identifier_start_unicode;
 
 pub const EOF: char = '\0';
 
@@ -109,11 +110,6 @@ pub fn is_identifier_start(c: char) -> bool {
 #[inline]
 pub fn is_identifier_start_ascii(c: char) -> bool {
     ASCII_START.0[c as usize]
-}
-
-#[inline]
-pub fn is_identifier_start_unicode(c: char) -> bool {
-    is_id_start_unicode(c)
 }
 
 /// Section 12.7 Detect `IdentifierPartChar`
