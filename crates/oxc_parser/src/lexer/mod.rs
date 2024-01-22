@@ -488,7 +488,7 @@ impl<'a> Lexer<'a> {
         let next_byte = match self.identifier_consume_ascii_identifier_bytes(&mut bytes) {
             Some(b) => b,
             None => {
-                return self.identifier_end(&bytes);
+                return self.identifier_eof();
             }
         };
 
@@ -544,6 +544,15 @@ impl<'a> Lexer<'a> {
         let len = self.remaining().len() - bytes.len();
         let (text, remaining) = self.remaining().split_at(len);
         self.current.chars = remaining.chars();
+        text
+    }
+
+    /// Identifier end at EOF.
+    /// Return text of identifier, and advance `self.current.chars` to end of file.
+    #[cold]
+    fn identifier_eof(&mut self) -> &'a str {
+        let text = self.remaining();
+        self.current.chars = text[text.len()..].chars();
         text
     }
 
