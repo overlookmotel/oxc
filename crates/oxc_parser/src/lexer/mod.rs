@@ -795,11 +795,10 @@ impl<'a> Lexer<'a> {
         }
 
         if !b.is_ascii() {
-            let c = self.peek().unwrap();
+            let mut chars = self.current.chars.clone();
+            let c = chars.next().unwrap();
             if is_identifier_start_unicode(c) {
-                // Eat char from `bytes` (but not from `self.current.chars`)
-                let mut chars = self.current.chars.clone();
-                chars.next();
+                // Char has been eaten from `bytes` (but not from `self.current.chars`)
                 let bytes = chars.as_str().bytes();
                 self.identifier_tail_after_no_escape(bytes);
                 return Kind::PrivateIdentifier;
