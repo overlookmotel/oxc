@@ -541,14 +541,19 @@ impl<'a> Lexer<'a> {
         // TODO: Could do this unchecked.
         // This fn would have to become unsafe, with proviso that `bytes` is on a UTF-8 boundary.
         // ```
-        // let index = remaining.len() - bytes.len();
-        // self.current.chars = self.remaining().get_unchecked(index..);
-        // &self.remaining().get_unchecked(0..index)
+        // let remaining = self.remaining();
+        // let len = remaining.len() - bytes.len();
+        // self.current.chars = remaining.get_unchecked(len..);
+        // remaining.get_unchecked(..len)
         // ```
-        let len = self.remaining().len() - bytes.len();
-        let (text, remaining) = self.remaining().split_at(len);
-        self.current.chars = remaining.chars();
-        text
+        // SAFETY: Only safe if `self.remaining().as_bytes()[self.remaining.len() - bytes.len()]`
+        // is a UTF-8 character boundary, and within bounds of `self.remaining()`
+        unsafe {
+            let remaining = self.remaining();
+            let len = remaining.len() - bytes.len();
+            self.current.chars = remaining.get_unchecked(len..).chars();
+            remaining.get_unchecked(..len)
+        }
     }
 
     /// Identifier end at EOF.
