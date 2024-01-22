@@ -473,7 +473,10 @@ impl<'a> Lexer<'a> {
     /// Should be called only if next char in `self.current.chars` is ASCII.
     fn identifier_name_handler(&mut self) -> &'a str {
         // `bytes` skip the character already identified as ASCII
-        let bytes = self.remaining()[1..].bytes();
+        // SAFETY: This function must only be called if next char in `self.current.chars` is ASCII
+        // TODO: If this unsafe code makes it faster, this function needs to be unsafe.
+        // If not, remove the unsafe here.
+        let bytes = unsafe { self.remaining().get_unchecked(1..).bytes() };
         self.identifier_tail_after_no_escape(bytes)
     }
 
