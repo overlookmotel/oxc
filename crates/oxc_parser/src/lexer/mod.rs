@@ -470,6 +470,7 @@ impl<'a> Lexer<'a> {
 
     /// Handle identifier with ASCII start character.
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
+    /// Should be called only if next char in `self.current.chars` is ASCII.
     fn identifier_name_handler(&mut self) -> &'a str {
         // `bytes` skip the character already identified as ASCII
         let bytes = self.remaining()[1..].bytes();
