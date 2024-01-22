@@ -624,7 +624,7 @@ impl<'a> Lexer<'a> {
     fn identifier_after_backslash(
         &mut self,
         mut bytes: Bytes<'a>,
-        check_identifier_start: bool,
+        mut check_identifier_start: bool,
     ) -> &'a str {
         // We don't know how many characters yet to come before end of this identifier.
         // Take a guess that total length of identifier will be double what we've seen so far,
@@ -644,6 +644,7 @@ impl<'a> Lexer<'a> {
 
             // Consume escape sequence from `chars` and add char to `str`
             self.identifier_unicode_escape_sequence(&mut str, check_identifier_start);
+            check_identifier_start = false;
 
             // Bring `bytes` iterator back into sync with `chars` iterator.
             // i.e. advance `bytes` to after the escape sequence.
