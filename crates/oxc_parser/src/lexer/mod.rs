@@ -561,6 +561,7 @@ impl<'a> Lexer<'a> {
     /// Any number of characters can have already been eaten from `bytes` iterator prior to it.
     /// `bytes` iterator should be positioned at start of Unicode character.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
+    // `#[cold]` to guide branch predictor that Unicode chars in identifiers are rare.
     #[cold]
     fn identifier_tail_after_unicode_byte(&mut self, mut bytes: Bytes<'a>) -> &'a str {
         let is_identifier_part =
@@ -618,14 +619,16 @@ impl<'a> Lexer<'a> {
     /// Any number of characters can have been eaten from `bytes` iterator prior to the `\`.
     /// `\` byte must not have been eaten from `bytes`.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
+    // `#[cold]` to guide branch predictor that escapes in identifiers are rare.
     #[cold]
     fn identifier_after_backslash(
         &mut self,
         mut bytes: Bytes<'a>,
         check_identifier_start: bool,
     ) -> &'a str {
-        // We don't know how many characters yet to come.
-        // Guess that same amount again or 16 minimum.
+        // We don't know how many characters yet to come before end of this identifier.
+        // Take a guess that total length of identifier will be double what we've seen so far,
+        // or 16 minimum.
         const MIN_LEN: usize = 16;
         let len = self.remaining().len() - bytes.len();
         let capacity = (len * 2).max(MIN_LEN);
