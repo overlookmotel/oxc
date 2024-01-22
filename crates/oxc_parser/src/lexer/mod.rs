@@ -792,7 +792,7 @@ impl<'a> Lexer<'a> {
     fn private_identifier_not_ascii_id(&mut self, bytes: Bytes<'a>) -> Kind {
         let b = bytes.clone().next().unwrap();
         if b == b'\\' {
-            // `\` byte has not been eaten from `bytes`
+            // Do not consume `\` byte from `bytes`
             self.identifier_after_backslash(bytes, true);
             return Kind::PrivateIdentifier;
         }
