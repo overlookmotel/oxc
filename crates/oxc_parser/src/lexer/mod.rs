@@ -470,14 +470,17 @@ impl<'a> Lexer<'a> {
 
     /// Handle identifier with ASCII start character.
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
-    /// Should be called only if next char in `self.current.chars` is ASCII.
-    fn identifier_name_handler(&mut self) -> &'a str {
-        // `bytes` skip the character already identified as ASCII
-        // SAFETY: This function must only be called if next char in `self.current.chars` is ASCII
-        // TODO: If this unsafe code makes it faster, this function needs to be unsafe.
-        // If not, remove the unsafe here.
-        let bytes = unsafe { self.remaining().get_unchecked(1..).bytes() };
-        self.identifier_tail_after_no_escape(bytes)
+    /// SAFETY: Next char in `self.current.chars` must be ASCII.
+    unsafe fn identifier_name_handler(&mut self) -> &'a str {
+        // `bytes` skip the character which caller guarantees is ASCII
+        let bytes = self.remaining().get_unchecked(1..).bytes();
+        let text = self.identifier_tail_after_no_escape(bytes);
+
+        // Return identifier minus its first character
+        // Caller guaranteed first char was ASCII.
+        // Everything we've done since guarantees this is safe.
+        // TODO: Write this comment better!
+        text.get_unchecked(1..)
     }
 
     /// Handle identifier after 1st char dealt with.
@@ -1589,6 +1592,23 @@ macro_rules! ascii_byte_handler {
             $body
         };
     };
+    // TODO: Make this a separate macro
+    ($id:ident($lex:ident, $id_handler:ident) $body:expr) => {
+        const $id: ByteHandler = |$lex| {
+            fn $id_handler<'a>(lexer: &mut Lexer<'a>) -> &'a str {
+                // SAFETY: This macro is only used for ASCII characters
+                unsafe { lexer.identifier_name_handler() }
+            }
+            // SAFETY: This macro is only used for ASCII characters
+            unsafe {
+                use assert_unchecked::assert_unchecked;
+                let s = $lex.current.chars.as_str();
+                assert_unchecked!(!s.is_empty());
+                assert_unchecked!(s.as_bytes()[0] < 128);
+            }
+            $body
+        };
+    };
 }
 
 // `\0` `\1` etc
@@ -1648,8 +1668,8 @@ ascii_byte_handler!(HAS(lexer) {
 });
 
 // `A..=Z`, `a..=z` (except special cases below), `_`, `$`
-ascii_byte_handler!(IDT(lexer) {
-    lexer.identifier_name_handler();
+ascii_byte_handler!(IDT(lexer, id_handler) {
+    id_handler(lexer);
     Kind::Ident
 });
 
@@ -1911,7 +1931,7 @@ ascii_byte_handler!(TLD(lexer) {
     Kind::Tilde
 });
 
-ascii_byte_handler!(L_A(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_A(lexer, id_handler) match id_handler(lexer) {
     "wait" => Kind::Await,
     "sync" => Kind::Async,
     "bstract" => Kind::Abstract,
@@ -1923,14 +1943,14 @@ ascii_byte_handler!(L_A(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_B(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_B(lexer, id_handler) match id_handler(lexer) {
     "reak" => Kind::Break,
     "oolean" => Kind::Boolean,
     "igint" => Kind::BigInt,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_C(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_C(lexer, id_handler) match id_handler(lexer) {
     "onst" => Kind::Const,
     "lass" => Kind::Class,
     "ontinue" => Kind::Continue,
@@ -1940,7 +1960,7 @@ ascii_byte_handler!(L_C(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_D(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_D(lexer, id_handler) match id_handler(lexer) {
     "o" => Kind::Do,
     "elete" => Kind::Delete,
     "eclare" => Kind::Declare,
@@ -1949,7 +1969,7 @@ ascii_byte_handler!(L_D(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_E(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_E(lexer, id_handler) match id_handler(lexer) {
     "lse" => Kind::Else,
     "num" => Kind::Enum,
     "xport" => Kind::Export,
@@ -1957,7 +1977,7 @@ ascii_byte_handler!(L_E(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_F(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_F(lexer, id_handler) match id_handler(lexer) {
     "unction" => Kind::Function,
     "alse" => Kind::False,
     "or" => Kind::For,
@@ -1966,13 +1986,13 @@ ascii_byte_handler!(L_F(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_G(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_G(lexer, id_handler) match id_handler(lexer) {
     "et" => Kind::Get,
     "lobal" => Kind::Global,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_I(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_I(lexer, id_handler) match id_handler(lexer) {
     "f" => Kind::If,
     "nstanceof" => Kind::Instanceof,
     "n" => Kind::In,
@@ -1985,23 +2005,23 @@ ascii_byte_handler!(L_I(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_K(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_K(lexer, id_handler) match id_handler(lexer) {
     "eyof" => Kind::KeyOf,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_L(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_L(lexer, id_handler) match id_handler(lexer) {
     "et" => Kind::Let,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_M(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_M(lexer, id_handler) match id_handler(lexer) {
     "eta" => Kind::Meta,
     "odule" => Kind::Module,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_N(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_N(lexer, id_handler) match id_handler(lexer) {
     "ull" => Kind::Null,
     "ew" => Kind::New,
     "umber" => Kind::Number,
@@ -2010,7 +2030,7 @@ ascii_byte_handler!(L_N(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_O(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_O(lexer, id_handler) match id_handler(lexer) {
     "f" => Kind::Of,
     "bject" => Kind::Object,
     "ut" => Kind::Out,
@@ -2018,7 +2038,7 @@ ascii_byte_handler!(L_O(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_P(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_P(lexer, id_handler) match id_handler(lexer) {
     "ackage" => Kind::Package,
     "rivate" => Kind::Private,
     "rotected" => Kind::Protected,
@@ -2026,14 +2046,14 @@ ascii_byte_handler!(L_P(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_R(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_R(lexer, id_handler) match id_handler(lexer) {
     "eturn" => Kind::Return,
     "equire" => Kind::Require,
     "eadonly" => Kind::Readonly,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_S(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_S(lexer, id_handler) match id_handler(lexer) {
     "et" => Kind::Set,
     "uper" => Kind::Super,
     "witch" => Kind::Switch,
@@ -2044,7 +2064,7 @@ ascii_byte_handler!(L_S(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_T(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_T(lexer, id_handler) match id_handler(lexer) {
     "his" => Kind::This,
     "rue" => Kind::True,
     "hrow" => Kind::Throw,
@@ -2055,7 +2075,7 @@ ascii_byte_handler!(L_T(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_U(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_U(lexer, id_handler) match id_handler(lexer) {
     "ndefined" => Kind::Undefined,
     "sing" => Kind::Using,
     "nique" => Kind::Unique,
@@ -2063,19 +2083,19 @@ ascii_byte_handler!(L_U(lexer) match &lexer.identifier_name_handler()[1..] {
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_V(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_V(lexer, id_handler) match id_handler(lexer) {
     "ar" => Kind::Var,
     "oid" => Kind::Void,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_W(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_W(lexer, id_handler) match id_handler(lexer) {
     "hile" => Kind::While,
     "ith" => Kind::With,
     _ => Kind::Ident,
 });
 
-ascii_byte_handler!(L_Y(lexer) match &lexer.identifier_name_handler()[1..] {
+ascii_byte_handler!(L_Y(lexer, id_handler) match id_handler(lexer) {
     "ield" => Kind::Yield,
     _ => Kind::Ident,
 });
