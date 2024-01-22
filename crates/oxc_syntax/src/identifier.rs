@@ -106,7 +106,8 @@ pub fn is_identifier_start(c: char) -> bool {
     is_identifier_start_unicode(c)
 }
 
-#[inline]
+#[allow(clippy::inline_always)]
+#[inline(always)]
 pub fn is_identifier_start_ascii(c: char) -> bool {
     ASCII_START.0[c as usize]
 }
@@ -126,7 +127,8 @@ pub fn is_identifier_part(c: char) -> bool {
     is_identifier_part_unicode(c)
 }
 
-#[inline]
+#[allow(clippy::inline_always)]
+#[inline(always)]
 pub fn is_identifier_part_ascii(c: char) -> bool {
     ASCII_CONTINUE.0[c as usize]
 }
