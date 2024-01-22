@@ -628,7 +628,7 @@ impl<'a> Lexer<'a> {
         // Guess that same amount again or 16 minimum.
         const MIN_LEN: usize = 16;
         let len = self.remaining().len() - bytes.len();
-        let capacity = (len * 2).min(MIN_LEN);
+        let capacity = (len * 2).max(MIN_LEN);
         let mut str = String::with_capacity_in(capacity, self.allocator);
 
         // TODO: Add a more performant `push_str()` method to `oxc_allocator::String`
