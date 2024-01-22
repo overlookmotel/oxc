@@ -619,22 +619,32 @@ impl<'a> Lexer<'a> {
     /// Any number of characters can have been eaten from `bytes` iterator prior to the `\`.
     /// `\` byte must not have been eaten from `bytes`.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
-    // `#[cold]` to guide branch predictor that escapes in identifiers are rare.
+    // `check_identifier_start` should be `true` if this is 1st char in the identifier,
+    // and `false` otherwise.
+    // `#[cold]` to guide branch predictor that escapes in identifiers are rare and keep a fast path
+    // in `identifier_tail_after_no_escape` for the common case.
     #[cold]
     fn identifier_after_backslash(
         &mut self,
         mut bytes: Bytes<'a>,
         mut check_identifier_start: bool,
     ) -> &'a str {
-        // We don't know how many characters yet to come before end of this identifier.
-        // Take a guess that total length of identifier will be double what we've seen so far,
-        // or 16 minimum.
+        // All the other identifier lexer functions only iterate through `bytes`,
+        // leaving `self.current.chars` unchanged until the end of the identifier is found.
+        // At this point, after finding an escape, we change approach.
+        // In this function, the unescaped identifier is built up in an arena `String`.
+        // Each time an escape is found, all the previous non-escaped bytes are pushed into the `String`
+        // and `chars` iterator advanced to after the escape sequence.
+        // We then search again for another run of unescaped bytes, and push them to the `String`
+        // as a single chunk. If another escape is found, loop back and do same again.
+
+        // Create an arena string to hold unescaped identifier.
+        // We don't know how long identifier will end up being. Take a guess that total length
+        // will be double what we've seen so far, or 16 minimum.
         const MIN_LEN: usize = 16;
         let len = self.remaining().len() - bytes.len();
         let capacity = (len * 2).max(MIN_LEN);
         let mut str = String::with_capacity_in(capacity, self.allocator);
-
-        // TODO: Add a more performant `push_str()` method to `oxc_allocator::String`
 
         loop {
             // Add bytes before this escape to `str` and advance `chars` iterator to after the `\`
