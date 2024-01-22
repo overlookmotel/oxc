@@ -549,7 +549,11 @@ impl<'a> Lexer<'a> {
 
     /// Identifier end at EOF.
     /// Return text of identifier, and advance `self.current.chars` to end of file.
-    #[cold]
+    // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
+    // which is on the fast path for common cases.
+    // TODO: Make this cold? EOF only happens once.
+    // Otherwise, remove it, and replace uses of it with `identifier_end()`.
+    #[inline]
     fn identifier_eof(&mut self) -> &'a str {
         let text = self.remaining();
         self.current.chars = text[text.len()..].chars();
