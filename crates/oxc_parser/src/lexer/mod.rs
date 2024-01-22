@@ -468,9 +468,12 @@ impl<'a> Lexer<'a> {
 
     /// Section 12.7.1 Identifier Names
 
+    /// TODO: Move all the identifier stuff into separate module to contain the unsafe.
+
     /// Handle identifier with ASCII start character.
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
     /// SAFETY: Next char in `self.current.chars` must be ASCII.
+    /// TODO: Can we get a gain by avoiding returning slice if it's not used (IDT handler)?
     unsafe fn identifier_name_handler(&mut self) -> &'a str {
         // `bytes` skip the character which caller guarantees is ASCII
         let bytes = self.remaining().get_unchecked(1..).bytes();
