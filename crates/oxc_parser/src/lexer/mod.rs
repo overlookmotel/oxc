@@ -564,10 +564,9 @@ impl<'a> Lexer<'a> {
     // `#[cold]` to guide branch predictor that Unicode chars in identifiers are rare.
     #[cold]
     fn identifier_tail_after_unicode_byte(&mut self, mut bytes: Bytes<'a>) -> &'a str {
-        let is_identifier_part =
-            self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
-        if is_identifier_part {
-            let at_end = self.identifier_consume_until_end_or_escape(&mut bytes);
+        let at_end = self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
+        if !at_end {
+            let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if !at_end {
                 return self.identifier_after_backslash(bytes, false);
             }
@@ -594,8 +593,8 @@ impl<'a> Lexer<'a> {
             }
 
             // Unicode char
-            let is_identifier_part = self.identifier_consume_unicode_char_if_identifier_part(bytes);
-            if !is_identifier_part {
+            let at_end = self.identifier_consume_unicode_char_if_identifier_part(bytes);
+            if at_end {
                 return true;
             }
             // Char was part of identifier. Go round again.
@@ -603,16 +602,19 @@ impl<'a> Lexer<'a> {
     }
 
     /// Consume unicode character from `bytes` if it's part of identifier.
-    /// Returns `true` if consumed a char, `false` if not.
+    /// Returns `true` if at end of identifier (this character is not part of identifier)
+    /// or `false` if character was consumed and potentially more of identifier still to come.
     fn identifier_consume_unicode_char_if_identifier_part(&self, bytes: &mut Bytes<'a>) -> bool {
         let mut chars = self.source[self.source.len() - bytes.len()..].chars();
         let c = chars.next().unwrap();
-        if !is_identifier_part_unicode(c) {
-            return false;
+        if is_identifier_part_unicode(c) {
+            // Advance `bytes` iterator past this character
+            *bytes = chars.as_str().bytes();
+            false
+        } else {
+            // Reached end of identifier
+            true
         }
-        // Advance `bytes` iterator past this character
-        *bytes = chars.as_str().bytes();
-        true
     }
 
     /// Handle identifier after a `\` found.
