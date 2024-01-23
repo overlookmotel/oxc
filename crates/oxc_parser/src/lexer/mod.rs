@@ -541,21 +541,16 @@ impl<'a> Lexer<'a> {
     // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
     // which is on the fast path for common cases.
     #[inline]
-    fn identifier_end(&mut self, bytes: &BytesIter) -> &'a str {
-        // TODO: Could do this unchecked.
-        // This fn would have to become unsafe, with proviso that `bytes` is on a UTF-8 boundary.
-        // ```
-        // let remaining = self.remaining();
-        // let len = remaining.len() - bytes.len();
-        // self.current.chars = remaining.get_unchecked(len..);
-        // remaining.get_unchecked(..len)
-        // ```
+    fn identifier_end(&mut self, bytes: &BytesIter<'a>) -> &'a str {
         // SAFETY: Only safe if `self.remaining().as_bytes()[self.remaining.len() - bytes.len()]`
         // is a UTF-8 character boundary, and within bounds of `self.remaining()`
+        // TODO: Make this function unsafe instead of this unsafe block.
         unsafe {
             let remaining = self.remaining();
-            let len = remaining.len() - bytes.len();
-            self.current.chars = remaining.get_unchecked(len..).chars();
+            let slice = bytes.as_slice();
+            self.current.chars = std::str::from_utf8_unchecked(slice).chars();
+
+            let len = slice.as_ptr() as usize - remaining.as_ptr() as usize;
             remaining.get_unchecked(..len)
         }
     }
