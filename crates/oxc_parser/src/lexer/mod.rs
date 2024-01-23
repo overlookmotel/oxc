@@ -470,15 +470,47 @@ impl<'a> Lexer<'a> {
     /// SAFETY: Next char in `self.current.chars` must be ASCII.
     /// TODO: Can we get a gain by avoiding returning slice if it's not used (IDT handler)?
     unsafe fn identifier_name_handler(&mut self) -> &'a str {
-        // `bytes` skip the character which caller guarantees is ASCII
-        let bytes = self.remaining().as_bytes().get_unchecked(1..).iter();
-        let text = self.identifier_tail_after_no_escape(bytes);
+        // Skip the character which caller guarantees is ASCII
+        let remaining = self.remaining().get_unchecked(1..);
+        let mut bytes = remaining.as_bytes().iter();
 
-        // Return identifier minus its first character
-        // Caller guaranteed first char was ASCII.
-        // Everything we've done since guarantees this is safe.
-        // TODO: Write this comment better!
-        text.get_unchecked(1..)
+        while let Some(&b) = bytes.clone().next() {
+            if is_identifier_part_ascii_byte(b) {
+                bytes.next();
+                continue;
+            }
+
+            if b == b'\\' {
+                #[cold]
+                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_after_backslash(bytes, false)[1..]
+                }
+                return backslash(self, bytes);
+            }
+
+            if b == b'\\' {
+                #[cold]
+                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_after_backslash(bytes, false)[1..]
+                }
+                return backslash(self, bytes);
+            }
+            if !b.is_ascii() {
+                #[cold]
+                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_tail_after_unicode_byte(bytes)[1..]
+                }
+                return unicode(self, bytes);
+            }
+            break;
+        }
+
+        // End of identifier found
+        let slice = bytes.as_slice();
+        self.current.chars = std::str::from_utf8_unchecked(slice).chars();
+
+        let len = slice.as_ptr() as usize - remaining.as_ptr() as usize;
+        remaining.get_unchecked(..len)
     }
 
     /// Handle identifier after 1st char dealt with.
