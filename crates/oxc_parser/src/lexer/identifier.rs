@@ -9,7 +9,6 @@ use oxc_syntax::identifier::{
 };
 
 impl<'a> Lexer<'a> {
-    /// TODO: Make some of these functions unsafe e.g. `identifier_tail_after_no_escape`.
     /// TODO: Make a wrapper type for bytes iterator.
     /// TODO: All functions take `&BytesIter` instead of `BytesIter`?
 
@@ -130,17 +129,11 @@ impl<'a> Lexer<'a> {
     // which is on the fast path for common cases.
     #[inline]
     fn identifier_end(&mut self, bytes: &BytesIter<'a>) -> &'a str {
-        // SAFETY: Only safe if `self.remaining().as_bytes()[self.remaining.len() - bytes.len()]`
-        // is a UTF-8 character boundary, and within bounds of `self.remaining()`
-        // TODO: Remove unsafe from this function.
-        unsafe {
-            let remaining = self.remaining();
-            let slice = bytes.as_slice();
-            self.current.chars = std::str::from_utf8_unchecked(slice).chars();
-
-            let len = slice.as_ptr() as usize - remaining.as_ptr() as usize;
-            remaining.get_unchecked(..len)
-        }
+        let remaining = self.remaining();
+        let len = bytes.as_slice().as_ptr() as usize - remaining.as_ptr() as usize;
+        let (text, after_identifier) = remaining.split_at(len);
+        self.current.chars = after_identifier.chars();
+        text
     }
 
     /// Identifier end at EOF.
