@@ -469,14 +469,38 @@ impl<'a> Lexer<'a> {
     /// TODO: All functions take `&BytesIter` instead of `BytesIter`?
 
     /// Handle identifier with ASCII start character.
+    /// Returns text of the identifier, minus its first char.
+    ///
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
     ///
-    /// SAFETY: Next char in `self.current.chars` must be ASCII.
+    /// This function is the "fast path" for the most common identifiers in JS code - purely
+    /// consisting of ASCII characters: `a`-`z`, `A`-`Z`, `0`-`9`, `_`, `$`.
+    /// JS syntax also allows Unicode identifiers and escapes (e.g. `\u{FF}`) in identifiers,
+    /// but they are very rare in practice. So this fast path will handle 99% of JS code.
+    ///
+    /// SAFETY:
+    /// * `self.current.chars` must not be exhausted (at least 1 char remaining).
+    /// * Next char must be ASCII.
+    ///
+    /// Much of this function's code is duplicated in other functions below.
+    /// This is not DRY, but is justified for 2 reasons:
+    /// 1. Keeping all code for the fast path in a single function produces optimal performance.
+    /// 2. Keeping the core logic of the fast path contained in one place makes it  easier to verify
+    ///    the correctness of the unsafe code which is required for maximum speed.
+    ///    The other identifier functions are more complex and therefore do not use unsafe code,
+    ///    at the cost of speed, but they handle only rare cases anyway.
     unsafe fn identifier_name_handler(&mut self) -> &'a str {
-        // Skip the character which caller guarantees is ASCII
-        let remaining = self.remaining().get_unchecked(1..);
-        let mut bytes = remaining.as_bytes().iter();
+        // Create iterator over remaining bytes, but skipping the 1st byte.
+        // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
+        // because caller guarantees current char is ASCII.
+        let str_not_inc_first = self.remaining().get_unchecked(1..);
+        let mut bytes = str_not_inc_first.as_bytes().iter();
 
+        // Consume bytes from `bytes` iterator until reach a byte which can't be part of an identifier,
+        // or reaching EOF.
+        // Code paths for Unicode characters and `\` escapes marked `#[cold]` to hint to branch predictor
+        // to expect ASCII chars only, which makes processing ASCII-only identifiers as fast as possible.
+        // NB: `self.current.chars` is *not* advanced in this loop.
         while let Some(&b) = bytes.clone().next() {
             if is_identifier_part_ascii_byte(b) {
                 bytes.next();
@@ -496,15 +520,20 @@ impl<'a> Lexer<'a> {
                 }
                 return unicode(self, bytes);
             }
+            // ASCII char which is not part of identifier
             break;
         }
 
-        // End of identifier found
-        let slice = bytes.as_slice();
-        self.current.chars = std::str::from_utf8_unchecked(slice).chars();
+        // End of identifier found (which may be EOF).
+        // Advance `self.current.chars` up to after end of identifier.
+        let after_identifier = bytes.as_slice();
+        self.current.chars = std::str::from_utf8_unchecked(after_identifier).chars();
 
-        let len = slice.as_ptr() as usize - remaining.as_ptr() as usize;
-        remaining.get_unchecked(..len)
+        // Return identifier minus it's first char.
+        // We know `len` can't cut string in middle of a Unicode character sequence,
+        // because we've only found ASCII bytes up to this point.
+        let len = after_identifier.as_ptr() as usize - str_not_inc_first.as_ptr() as usize;
+        str_not_inc_first.get_unchecked(..len)
     }
 
     /// Handle identifier after 1st char dealt with.
