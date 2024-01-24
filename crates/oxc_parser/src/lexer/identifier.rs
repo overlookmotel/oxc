@@ -73,18 +73,12 @@ impl<'a> Lexer<'a> {
         }
 
         // End of identifier found (which may be EOF).
-        // Advance `self.current.chars` up to after end of identifier.
-        // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
-        // bytes from it, so converting `bytes` to a str is safe.
-        let after_id = bytes.as_slice();
-        self.current.chars = std::str::from_utf8_unchecked(after_id).chars();
-
-        // Return identifier minus its first char.
-        // We know `len` can't cut string in middle of a Unicode character sequence,
-        // because we've only found ASCII bytes up to this point.
+        // Advance `self.current.chars` to after identifier, and return identifier minus first char.
         let len_without_first =
-            after_id.as_ptr() as usize - remaining_after_first.as_ptr() as usize;
-        remaining_after_first.get_unchecked(..len_without_first)
+            bytes.as_slice().as_ptr() as usize - remaining_after_first.as_ptr() as usize;
+        let (id_without_first, after_id) = remaining_after_first.split_at(len_without_first);
+        self.current.chars = after_id.chars();
+        id_without_first
     }
 
     /// Handle identifier after first char dealt with.
