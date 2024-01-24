@@ -239,15 +239,15 @@ impl<'a> Lexer<'a> {
         // We don't know how long identifier will end up being. Take a guess that total length
         // will be double what we've seen so far, or 16 minimum.
         const MIN_LEN: usize = 16;
-        let len = self.remaining().len() - bytes.len();
-        let capacity = (len * 2).max(MIN_LEN);
+        let mut len_to_push =
+            bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
+        let capacity = (len_to_push * 2).max(MIN_LEN);
         let mut str = String::with_capacity_in(capacity, self.allocator);
 
         loop {
             // Add bytes before this escape to `str` and advance `chars` iterator to after the `\`
-            let len = self.remaining().len() - bytes.len();
-            str.push_str(&self.remaining()[0..len]);
-            self.current.chars = self.remaining()[len + 1..].chars();
+            str.push_str(&self.remaining()[0..len_to_push]);
+            self.current.chars = self.remaining()[len_to_push + 1..].chars();
 
             // Consume escape sequence from `chars` and add char to `str`
             self.identifier_unicode_escape_sequence(&mut str, is_start);
@@ -257,12 +257,13 @@ impl<'a> Lexer<'a> {
             // i.e. advance `bytes` to after the escape sequence.
             bytes = self.remaining().as_bytes().iter();
 
-            // Consume bytes until reach end of identifier or another escape
+            // Consume bytes from `bytes` until reach end of identifier or another escape
             let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if at_end {
                 break;
             }
             // Found another `\` escape
+            len_to_push = bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
         }
 
         // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier
