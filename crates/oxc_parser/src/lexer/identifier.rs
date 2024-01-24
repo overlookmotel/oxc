@@ -247,6 +247,8 @@ impl<'a> Lexer<'a> {
         let mut str = String::with_capacity_in(capacity, self.allocator);
 
         // Push identifier up this point into `str`
+        // `bumpalo::collections::string::String::push_str` is currently expensive due to
+        // inefficiency in bumpalo's implementation. But best we have right now.
         str.push_str(&self.remaining()[0..len_so_far]);
 
         // Advance `self.current.chars` to after backslash
@@ -276,7 +278,9 @@ impl<'a> Lexer<'a> {
             let mut bytes = self.remaining().as_bytes().iter();
             let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if at_end {
-                // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier
+                // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier.
+                // `bumpalo::collections::string::String::push_str` is currently expensive due to
+                // inefficiency in bumpalo's implementation. But best we have right now.
                 let last_chunk = self.identifier_end(&bytes);
                 str.push_str(last_chunk);
                 break;
