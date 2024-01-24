@@ -36,7 +36,7 @@ impl<'a> Lexer<'a> {
     ///    at the cost of speed, but they handle only rare cases anyway.
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
-        // Create iterator over remaining bytes, but skipping the 1st byte.
+        // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
         let str_not_inc_first = self.remaining().get_unchecked(1..);
@@ -77,17 +77,17 @@ impl<'a> Lexer<'a> {
         let after_identifier = bytes.as_slice();
         self.current.chars = std::str::from_utf8_unchecked(after_identifier).chars();
 
-        // Return identifier minus it's first char.
+        // Return identifier minus its first char.
         // We know `len` can't cut string in middle of a Unicode character sequence,
         // because we've only found ASCII bytes up to this point.
         let len = after_identifier.as_ptr() as usize - str_not_inc_first.as_ptr() as usize;
         str_not_inc_first.get_unchecked(..len)
     }
 
-    /// Handle identifier after 1st char dealt with.
-    /// 1st char can have been ASCII or Unicode, but cannot have been a `\` escape.
-    /// 1st character should not be consumed from `self.current.chars` prior to calling this,
-    /// but `bytes` iterator should be positioned *after* 1st char.
+    /// Handle identifier after first char dealt with.
+    /// First char can have been ASCII or Unicode, but cannot have been a `\` escape.
+    /// First char should not be consumed from `self.current.chars` prior to calling this,
+    /// but `bytes` iterator should be positioned *after* first char.
     /// TODO: Optimize this. And amend functions it calls not to return `&str`.
     pub fn identifier_tail_after_no_escape(&mut self, mut bytes: BytesIter<'a>) {
         // Find first byte which isn't valid ASCII identifier part
@@ -156,7 +156,7 @@ impl<'a> Lexer<'a> {
         text
     }
 
-    /// Handle continuation of identifier after 1st byte of a multi-byte unicode char found.
+    /// Handle continuation of identifier after first byte of a multi-byte unicode char found.
     /// Any number of characters can have already been eaten from `bytes` iterator prior to it.
     /// `bytes` iterator should be positioned at start of Unicode character.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
@@ -224,7 +224,7 @@ impl<'a> Lexer<'a> {
     /// Any number of characters can have been eaten from `bytes` iterator prior to the `\`.
     /// `\` byte must not have been eaten from `bytes`.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
-    // `check_identifier_start` should be `true` if this is 1st char in the identifier,
+    // `is_start` should be `true` if this is first char in the identifier,
     // and `false` otherwise.
     // `#[cold]` to guide branch predictor that escapes in identifiers are rare and keep a fast path
     // in `identifier_tail_after_no_escape` for the common case.
@@ -233,7 +233,7 @@ impl<'a> Lexer<'a> {
     pub fn identifier_after_backslash(
         &mut self,
         mut bytes: BytesIter<'a>,
-        mut check_identifier_start: bool,
+        mut is_start: bool,
     ) -> &'a str {
         // All the other identifier lexer functions only iterate through `bytes`,
         // leaving `self.current.chars` unchanged until the end of the identifier is found.
@@ -259,8 +259,8 @@ impl<'a> Lexer<'a> {
             self.current.chars = self.remaining()[len + 1..].chars();
 
             // Consume escape sequence from `chars` and add char to `str`
-            self.identifier_unicode_escape_sequence(&mut str, check_identifier_start);
-            check_identifier_start = false;
+            self.identifier_unicode_escape_sequence(&mut str, is_start);
+            is_start = false;
 
             // Bring `bytes` iterator back into sync with `chars` iterator.
             // i.e. advance `bytes` to after the escape sequence.
