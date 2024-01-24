@@ -827,6 +827,7 @@ impl<'a> Lexer<'a> {
                 self.private_identifier_not_ascii_id(bytes)
             }
         } else {
+            // EOF
             let start = self.offset();
             self.error(diagnostics::UnexpectedEnd(Span::new(start, start)));
             Kind::Undetermined
@@ -846,13 +847,14 @@ impl<'a> Lexer<'a> {
             let mut chars = self.current.chars.clone();
             let c = chars.next().unwrap();
             if is_identifier_start_unicode(c) {
-                // Char has been eaten from `bytes` (but not from `self.current.chars`)
+                // Eat char from `bytes` (but not from `self.current.chars`)
                 let bytes = chars.as_str().as_bytes().iter();
                 self.identifier_tail_after_no_escape(bytes);
                 return Kind::PrivateIdentifier;
             }
         };
 
+        // No identifier found
         let start = self.offset();
         let c = self.consume_char();
         self.error(diagnostics::InvalidCharacter(c, Span::new(start, self.offset())));
