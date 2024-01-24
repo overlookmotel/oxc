@@ -61,7 +61,7 @@ impl<'a> Lexer<'a> {
             if !b.is_ascii() {
                 #[cold]
                 fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_tail_after_unicode_byte(bytes)[1..]
+                    &lexer.identifier_tail_unicode(bytes)[1..]
                 }
                 return unicode(self, bytes);
             }
@@ -102,7 +102,7 @@ impl<'a> Lexer<'a> {
         if next_byte == b'\\' {
             self.identifier_backslash(bytes, false);
         } else if !next_byte.is_ascii() {
-            self.identifier_tail_after_unicode_byte(bytes);
+            self.identifier_tail_unicode(bytes);
         } else {
             // End of identifier found.
             // Advance chars iterator to the byte we just found which isn't part of the identifier.
@@ -154,7 +154,7 @@ impl<'a> Lexer<'a> {
     // `#[cold]` to guide branch predictor that Unicode chars in identifiers are rare.
     // TODO: Remove `#[cold]`
     #[cold]
-    fn identifier_tail_after_unicode_byte(&mut self, mut bytes: BytesIter<'a>) -> &'a str {
+    fn identifier_tail_unicode(&mut self, mut bytes: BytesIter<'a>) -> &'a str {
         let at_end = self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
         if !at_end {
             let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
