@@ -198,8 +198,8 @@ impl<'a> Lexer<'a> {
         &self,
         bytes: &mut BytesIter<'a>,
     ) -> bool {
-        // TODO: Get rid of `source` here
-        let mut chars = self.source[self.source.len() - bytes.len()..].chars();
+        let current_len = bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
+        let mut chars = self.remaining()[current_len..].chars();
         let c = chars.next().unwrap();
         if is_identifier_part_unicode(c) {
             // Advance `bytes` iterator past this character
