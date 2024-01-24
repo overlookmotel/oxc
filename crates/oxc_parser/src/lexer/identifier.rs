@@ -10,7 +10,6 @@ use oxc_syntax::identifier::{
 
 impl<'a> Lexer<'a> {
     /// TODO: Make a wrapper type for bytes iterator.
-    /// TODO: All functions take `&BytesIter` instead of `BytesIter`?
 
     /// Handle identifier with ASCII start character.
     /// Returns text of the identifier, minus its first char.
