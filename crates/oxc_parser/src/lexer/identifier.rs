@@ -41,8 +41,8 @@ impl<'a> Lexer<'a> {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
-        let str_not_inc_first = self.remaining().get_unchecked(1..);
-        let mut bytes = str_not_inc_first.as_bytes().iter();
+        let remaining_after_first = self.remaining().get_unchecked(1..);
+        let mut bytes = remaining_after_first.as_bytes().iter();
 
         // Consume bytes from `bytes` iterator until reach a byte which can't be part of an identifier,
         // or reaching EOF.
@@ -74,14 +74,17 @@ impl<'a> Lexer<'a> {
 
         // End of identifier found (which may be EOF).
         // Advance `self.current.chars` up to after end of identifier.
-        let after_identifier = bytes.as_slice();
-        self.current.chars = std::str::from_utf8_unchecked(after_identifier).chars();
+        // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
+        // bytes from it, so converting `bytes` to a str is safe.
+        let after_id = bytes.as_slice();
+        self.current.chars = std::str::from_utf8_unchecked(after_id).chars();
 
         // Return identifier minus its first char.
         // We know `len` can't cut string in middle of a Unicode character sequence,
         // because we've only found ASCII bytes up to this point.
-        let len = after_identifier.as_ptr() as usize - str_not_inc_first.as_ptr() as usize;
-        str_not_inc_first.get_unchecked(..len)
+        let len_without_first =
+            after_id.as_ptr() as usize - remaining_after_first.as_ptr() as usize;
+        remaining_after_first.get_unchecked(..len_without_first)
     }
 
     /// Handle identifier after first char dealt with.
