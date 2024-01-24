@@ -55,7 +55,7 @@ impl<'a> Lexer<'a> {
             if b == b'\\' {
                 #[cold]
                 fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_after_backslash(bytes, false)[1..]
+                    &lexer.identifier_backslash(bytes, false)[1..]
                 }
                 return backslash(self, bytes);
             }
@@ -103,7 +103,7 @@ impl<'a> Lexer<'a> {
         // Most likely we're at the end of the identifier, but handle `\` escape and Unicode chars.
         // Fast path for normal ASCII identifiers, by marking the 2 uncommon cases `#[cold]`.
         if next_byte == b'\\' {
-            self.identifier_after_backslash(bytes, false);
+            self.identifier_backslash(bytes, false);
         } else if !next_byte.is_ascii() {
             self.identifier_tail_after_unicode_byte(bytes);
         } else {
@@ -167,7 +167,7 @@ impl<'a> Lexer<'a> {
         if !at_end {
             let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if !at_end {
-                return self.identifier_after_backslash(bytes, false);
+                return self.identifier_backslash(bytes, false);
             }
         }
 
@@ -230,7 +230,7 @@ impl<'a> Lexer<'a> {
     // in `identifier_tail_after_no_escape` for the common case.
     // TODO: Remove `#[cold]` and mark callers as cold instead.
     #[cold]
-    pub fn identifier_after_backslash(
+    pub fn identifier_backslash(
         &mut self,
         mut bytes: BytesIter<'a>,
         mut is_start: bool,
@@ -309,7 +309,7 @@ impl<'a> Lexer<'a> {
         let b = *bytes.clone().next().unwrap();
         if b == b'\\' {
             // Do not consume `\` byte from `bytes`
-            self.identifier_after_backslash(bytes, true);
+            self.identifier_backslash(bytes, true);
             return Kind::PrivateIdentifier;
         }
 

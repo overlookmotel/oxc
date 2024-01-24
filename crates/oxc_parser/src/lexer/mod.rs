@@ -1619,7 +1619,7 @@ ascii_byte_handler!(BTO(lexer) {
 ascii_byte_handler!(ESC(lexer) {
     // `bytes` iterator positioned on `\`
     let bytes = lexer.remaining().as_bytes().iter();
-    let text = lexer.identifier_after_backslash(bytes, true);
+    let text = lexer.identifier_backslash(bytes, true);
     Kind::match_keyword(text)
 });
 
