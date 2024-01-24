@@ -8,8 +8,12 @@ use oxc_syntax::identifier::{
     is_identifier_start_unicode,
 };
 
+const MIN_ESCAPED_STR_LEN: usize = 16;
+
 impl<'a> Lexer<'a> {
-    /// TODO: Make a wrapper type for bytes iterator.
+    /// TODO: Make a wrapper type for bytes iterator, or implement `Chars::bytes_iter`
+    /// which returns a `BytesIter`. And also maybe `&str::bytes_iter`.
+    /// Maybe also `Lexer::bytes_iter` as shortcut for `Lexer::remaining().as_bytes().iter()`.
 
     /// Handle identifier with ASCII start character.
     /// Returns text of the identifier, minus its first char.
@@ -211,66 +215,81 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Handle identifier after a `\` found.
-    /// Any number of characters can have been eaten from `bytes` iterator prior to the `\`.
-    /// `\` byte must not have been eaten from `bytes`.
-    /// Nothing should have been consumed from `self.current.chars` prior to calling this.
-    // `is_start` should be `true` if this is first char in the identifier,
-    // and `false` otherwise.
-    // `#[cold]` to guide branch predictor that escapes in identifiers are rare and keep a fast path
-    // in `identifier_tail_after_no_escape` for the common case.
-    // TODO: Remove `#[cold]` and mark callers as cold instead.
-    #[cold]
-    pub fn identifier_backslash(
-        &mut self,
-        mut bytes: BytesIter<'a>,
-        mut is_start: bool,
-    ) -> &'a str {
-        // All the other identifier lexer functions only iterate through `bytes`,
-        // leaving `self.current.chars` unchanged until the end of the identifier is found.
-        // At this point, after finding an escape, we change approach.
-        // In this function, the unescaped identifier is built up in an arena `String`.
-        // Each time an escape is found, all the previous non-escaped bytes are pushed into the `String`
-        // and `chars` iterator advanced to after the escape sequence.
-        // We then search again for another run of unescaped bytes, and push them to the `String`
-        // as a single chunk. If another escape is found, loop back and do same again.
+    // All the other identifier lexer functions only iterate through `bytes`,
+    // leaving `self.current.chars` unchanged until the end of the identifier is found.
+    // We change our approach after finding an escape.
+    // In these functions, the unescaped identifier is built up in an arena string.
+    // Each time an escape is found, all the previous non-escaped bytes are pushed into the `String`
+    // and `chars` iterator advanced to after the escape sequence.
+    // We then search again for another run of unescaped bytes, and push them to the `String`
+    // as a single chunk. If another escape is found, loop back and do same again.
 
-        // Create an arena string to hold unescaped identifier.
+    pub fn identifier_backslash_handler(&mut self) -> &'a str {
+        // Create arena string to hold unescaped identifier.
+        // We don't know how long identifier will end up being, so guess.
+        let str = String::with_capacity_in(MIN_ESCAPED_STR_LEN, self.allocator);
+
+        // Consume `\`
+        self.consume_char();
+
+        // Process escape and get rest of identifier
+        self.identifier_after_backslash(str, true)
+    }
+
+    #[cold]
+    #[allow(clippy::needless_pass_by_value)] // TODO: Test if faster to pass `bytes` as mut ref
+    fn identifier_backslash(&mut self, bytes: BytesIter<'a>, is_start: bool) -> &'a str {
+        // Create arena string to hold unescaped identifier.
         // We don't know how long identifier will end up being. Take a guess that total length
-        // will be double what we've seen so far, or 16 minimum.
-        const MIN_LEN: usize = 16;
-        let mut len_to_push =
-            bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
-        let capacity = (len_to_push * 2).max(MIN_LEN);
+        // will be double what we've seen so far, or `MIN_ESCAPED_STR_LEN` minimum.
+        let len_so_far = bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
+        let capacity = (len_so_far * 2).max(MIN_ESCAPED_STR_LEN);
         let mut str = String::with_capacity_in(capacity, self.allocator);
 
-        loop {
-            // Add bytes before this escape to `str` and advance `chars` iterator to after the `\`
-            str.push_str(&self.remaining()[0..len_to_push]);
-            self.current.chars = self.remaining()[len_to_push + 1..].chars();
+        // Push identifier up this point into `str`
+        str.push_str(&self.remaining()[0..len_so_far]);
 
-            // Consume escape sequence from `chars` and add char to `str`
+        // Advance `self.current.chars` to after backslash
+        self.current.chars = self.remaining()[len_so_far + 1..].chars();
+
+        // Process escape and get rest of identifier
+        self.identifier_after_backslash(str, is_start)
+    }
+
+    /// Process rest of identifier after a `\` found.
+    ///
+    /// `self.current.chars` should be positioned after the `\`,
+    /// and `str` contain the identifier up to before the escape.
+    ///
+    /// `is_start` should be `true` if this is first char in the identifier,
+    /// and `false` otherwise.
+    fn identifier_after_backslash(&mut self, mut str: String<'a>, mut is_start: bool) -> &'a str {
+        loop {
+            // Consume escape sequence from `chars` and add char to `str`.
+            // This advances `self.current.chars` to after end of escape sequence.
+            // TODO: Move `identifier_unicode_escape_sequence` into this module?
             self.identifier_unicode_escape_sequence(&mut str, is_start);
             is_start = false;
 
-            // Bring `bytes` iterator back into sync with `chars` iterator.
-            // i.e. advance `bytes` to after the escape sequence.
-            bytes = self.remaining().as_bytes().iter();
-
-            // Consume bytes from `bytes` until reach end of identifier or another escape
+            // Consume bytes until reach end of identifier or another escape.
+            // NB: This does not advance `self.current.chars`, only `bytes`.
+            let mut bytes = self.remaining().as_bytes().iter();
             let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
             if at_end {
+                // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier
+                let last_chunk = self.identifier_end(&bytes);
+                str.push_str(last_chunk);
                 break;
             }
-            // Found another `\` escape
-            len_to_push = bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
+
+            // Found another `\`.
+            // Add bytes before this escape to `str` and advance `chars` iterator to after the `\`.
+            let chunk_len = bytes.as_slice().as_ptr() as usize - self.remaining().as_ptr() as usize;
+            str.push_str(&self.remaining()[0..chunk_len]);
+            self.current.chars = self.remaining()[chunk_len + 1..].chars();
         }
 
-        // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier
-        let last_chunk = self.identifier_end(&bytes);
-        str.push_str(last_chunk);
-
-        // Convert to arena slice and save to `escaped_strings`
+        // Convert `str` to arena slice and save to `escaped_strings`
         let text = str.into_bump_str();
         self.save_string(true, text);
         text
@@ -297,12 +316,17 @@ impl<'a> Lexer<'a> {
     }
 
     #[cold]
+    #[allow(clippy::needless_pass_by_value)] // TODO: Test if faster to pass `bytes` as mut ref
     fn private_identifier_not_ascii_id(&mut self, bytes: BytesIter<'a>) -> Kind {
         let b = *bytes.clone().next().unwrap();
         if b == b'\\' {
-            // Do not consume `\` byte from `bytes`
-            self.identifier_backslash(bytes, true);
-            return Kind::PrivateIdentifier;
+            // Assume Unicode characters are more common than `\` escapes, so this branch `#[cold]`
+            #[cold]
+            fn backslash(lexer: &mut Lexer) -> Kind {
+                lexer.identifier_backslash_handler();
+                Kind::PrivateIdentifier
+            }
+            return backslash(self);
         }
 
         if !b.is_ascii() {
