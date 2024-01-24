@@ -59,10 +59,23 @@ impl<'a> Lexer<'a> {
             }
             if !b.is_ascii() {
                 #[cold]
-                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_tail_unicode(bytes)[1..]
+                fn unicode<'a>(lexer: &Lexer<'a>, bytes: &mut BytesIter<'a>) -> bool {
+                    let current_len =
+                        bytes.as_slice().as_ptr() as usize - lexer.remaining().as_ptr() as usize;
+                    let mut chars = lexer.remaining()[current_len..].chars();
+                    let c = chars.next().unwrap();
+                    if is_identifier_part_unicode(c) {
+                        // Advance `bytes` iterator past this character
+                        *bytes = chars.as_str().as_bytes().iter();
+                        true
+                    } else {
+                        // Reached end of identifier
+                        false
+                    }
                 }
-                return unicode(self, bytes);
+                if unicode(self, &mut bytes) {
+                    continue;
+                }
             }
             // ASCII char which is not part of identifier
             break;
