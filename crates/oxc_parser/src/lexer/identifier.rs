@@ -49,30 +49,43 @@ impl<'a> Lexer<'a> {
         // Code paths for Unicode characters and `\` escapes marked `#[cold]` to hint to branch predictor
         // to expect ASCII chars only, which makes processing ASCII-only identifiers as fast as possible.
         // NB: `self.current.chars` is *not* advanced in this loop.
-        while let Some(&b) = bytes.clone().next() {
-            if is_identifier_part_ascii_byte(b) {
-                bytes.next();
-                continue;
-            }
-            if !b.is_ascii() {
-                #[cold]
-                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_tail_unicode(bytes)[1..]
+        loop {
+            match bytes.clone().next() {
+                Some(&b) if is_identifier_part_ascii_byte(b) => {
+                    bytes.next();
                 }
-                return unicode(self, bytes);
-            }
-            if b == b'\\' {
-                #[cold]
-                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_backslash(bytes, false)[1..]
+                Some(&b) if !b.is_ascii() => {
+                    #[cold]
+                    fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                        &lexer.identifier_tail_unicode(bytes)[1..]
+                    }
+                    return unicode(self, bytes);
                 }
-                return backslash(self, bytes);
+                Some(b'\\') => {
+                    #[cold]
+                    fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                        &lexer.identifier_backslash(bytes, false)[1..]
+                    }
+                    return backslash(self, bytes);
+                }
+                Some(_) => {
+                    // ASCII char which is not part of identifier
+                    break;
+                }
+                None => {
+                    // EOF.
+                    // Advance `chars` to end of file, and return everything after first char.
+                    // NB: `self.current.chars = "".chars()` would also work here, but if compiler
+                    // is clever, this will be 1 less instruction as only start pointer of iterator
+                    // needs to be altered, the end pointer remains unchanged.
+                    self.current.chars =
+                        remaining_after_first[remaining_after_first.len()..].chars();
+                    return remaining_after_first;
+                }
             }
-            // ASCII char which is not part of identifier
-            break;
         }
 
-        // End of identifier found (which may be EOF).
+        // End of identifier found.
         // Advance `self.current.chars` up to after end of identifier.
         // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
         // bytes from it, so converting `bytes` to a `&str` is safe.
