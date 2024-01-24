@@ -54,19 +54,19 @@ impl<'a> Lexer<'a> {
                 bytes.next();
                 continue;
             }
-            if b == b'\\' {
-                #[cold]
-                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_backslash(bytes, false)[1..]
-                }
-                return backslash(self, bytes);
-            }
             if !b.is_ascii() {
                 #[cold]
                 fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
                     &lexer.identifier_tail_unicode(bytes)[1..]
                 }
                 return unicode(self, bytes);
+            }
+            if b == b'\\' {
+                #[cold]
+                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_backslash(bytes, false)[1..]
+                }
+                return backslash(self, bytes);
             }
             // ASCII char which is not part of identifier
             break;
