@@ -159,6 +159,7 @@ impl<'a> Lexer<'a> {
     /// `bytes` iterator should be positioned at start of Unicode character.
     /// Nothing should have been consumed from `self.current.chars` prior to calling this.
     // `#[cold]` to guide branch predictor that Unicode chars in identifiers are rare.
+    // TODO: Remove `#[cold]`
     #[cold]
     fn identifier_tail_after_unicode_byte(&mut self, mut bytes: BytesIter<'a>) -> &'a str {
         let at_end = self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
