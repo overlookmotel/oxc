@@ -396,8 +396,8 @@ impl<'a> Lexer<'a> {
         match c {
             c if is_identifier_start_unicode(c) => {
                 // `bytes` is positioned after this char
-                let bytes = chars.as_str().as_bytes().iter();
-                self.identifier_tail_after_no_escape(bytes);
+                let mut bytes = chars.as_str().as_bytes().iter();
+                self.identifier_tail_after_no_escape(&mut bytes);
                 Kind::Ident
             }
             c if is_irregular_whitespace(c) => {
@@ -1618,8 +1618,8 @@ ascii_byte_handler!(BTO(lexer) {
 // \
 ascii_byte_handler!(ESC(lexer) {
     // `bytes` iterator positioned on `\`
-    let bytes = lexer.remaining().as_bytes().iter();
-    let text = lexer.identifier_backslash(bytes, true);
+    let mut bytes = lexer.remaining().as_bytes().iter();
+    let text = lexer.identifier_backslash(&mut bytes, true);
     Kind::match_keyword(text)
 });
 
