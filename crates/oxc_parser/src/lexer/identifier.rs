@@ -12,6 +12,7 @@ impl<'a> Lexer<'a> {
     /// TODO: Make some of these functions unsafe e.g. `identifier_tail_after_no_escape`.
     /// TODO: Make a wrapper type for bytes iterator.
     /// TODO: All functions take `&BytesIter` instead of `BytesIter`?
+    /// TODO: Replace "1st" with "first" in comments.
 
     /// Handle identifier with ASCII start character.
     /// Returns text of the identifier, minus its first char.
@@ -66,22 +67,27 @@ impl<'a> Lexer<'a> {
                 }
                 return unicode(self, bytes);
             }
-            // ASCII char which is not part of identifier
-            break;
+
+            // ASCII char which is not part of identifier = end of identifier.
+            // Advance `self.current.chars` up to after end of identifier.
+            let after_identifier = bytes.as_slice();
+            self.current.chars = std::str::from_utf8_unchecked(after_identifier).chars();
+
+            // Return identifier minus its 1st char.
+            // We know `len` can't cut string in middle of a Unicode character sequence,
+            // because we've only found ASCII bytes up to this point.
+            let len = after_identifier.as_ptr() as usize - str_not_inc_first.as_ptr() as usize;
+            return str_not_inc_first.get_unchecked(..len);
         }
 
-        // TODO: Check if handling EOF separately is faster.
+        // Identifier ends at EOF.
+        // Advance `self.current.chars` up to end of file.
+        // NB: We could do `"".chars()`, but if compiler is clever this will produce 1 less instruction,
+        // as it only needs to alter start pointer of `chars` iterator, and end pointer is unaltered.
+        self.current.chars = str_not_inc_first[str_not_inc_first.len()..].chars();
 
-        // End of identifier found (which may be EOF).
-        // Advance `self.current.chars` up to after end of identifier.
-        let after_identifier = bytes.as_slice();
-        self.current.chars = std::str::from_utf8_unchecked(after_identifier).chars();
-
-        // Return identifier minus it's first char.
-        // We know `len` can't cut string in middle of a Unicode character sequence,
-        // because we've only found ASCII bytes up to this point.
-        let len = after_identifier.as_ptr() as usize - str_not_inc_first.as_ptr() as usize;
-        str_not_inc_first.get_unchecked(..len)
+        // Return identifier minus its 1st char
+        str_not_inc_first
     }
 
     /// Handle identifier after 1st char dealt with.
