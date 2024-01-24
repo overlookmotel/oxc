@@ -540,9 +540,6 @@ impl<'a> Lexer<'a> {
     /// 1st char can have been ASCII or Unicode, but cannot have been a `\` escape.
     /// 1st character should not be consumed from `self.current.chars` prior to calling this,
     /// but `bytes` iterator should be positioned *after* 1st char.
-    // `#[inline]` because we want this inlined into `identifier_name_handler`,
-    // which is the fast path for common cases.
-    #[inline]
     fn identifier_tail_after_no_escape(&mut self, mut bytes: BytesIter<'a>) -> &'a str {
         // Find first byte which isn't valid ASCII identifier part
         let next_byte = match self.identifier_consume_ascii_identifier_bytes(&mut bytes) {
