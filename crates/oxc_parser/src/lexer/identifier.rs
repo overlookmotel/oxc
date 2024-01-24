@@ -92,6 +92,11 @@ impl<'a> Lexer<'a> {
     /// First char should not be consumed from `self.current.chars` prior to calling this,
     /// but `bytes` iterator should be positioned *after* first char.
     /// TODO: Optimize this. And amend functions it calls not to return `&str`.
+    /// TODO: This is called when ASCII byte as first char of a private identifier
+    /// or after a Unicode char. We want to make path for 1st case fast for ASCII,
+    /// but if first char of an identifier is unicode, can't assume others won't be too.
+    /// So needs 2 separate implementations which handle those 2 cases with unicode branch
+    /// either `#[cold]` or not.
     pub fn identifier_tail_after_no_escape(&mut self, mut bytes: BytesIter<'a>) {
         // Find first byte which isn't valid ASCII identifier part
         let next_byte =
