@@ -464,9 +464,6 @@ impl<'a> Lexer<'a> {
     /// Section 12.7.1 Identifier Names
 
     /// TODO: Move all the identifier stuff into separate module to contain the unsafe.
-    /// TODO: Make some of these functions unsafe e.g. `identifier_tail_after_no_escape`.
-    /// TODO: Make a wrapper type for bytes iterator.
-    /// TODO: All functions take `&BytesIter` instead of `BytesIter`?
 
     /// Handle identifier with ASCII start character.
     /// Start character should not be consumed from `self.current.chars` prior to calling this.
@@ -505,37 +502,6 @@ impl<'a> Lexer<'a> {
 
         let len = slice.as_ptr() as usize - remaining.as_ptr() as usize;
         remaining.get_unchecked(..len)
-    }
-
-    unsafe fn identifier_name_handler_anon(&mut self) {
-        // Skip the character which caller guarantees is ASCII
-        let remaining = self.remaining().get_unchecked(1..);
-        let mut bytes = remaining.as_bytes().iter();
-
-        while let Some(&b) = bytes.clone().next() {
-            if is_identifier_part_ascii_byte(b) {
-                bytes.next();
-                continue;
-            }
-            if b == b'\\' {
-                #[cold]
-                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) {
-                    lexer.identifier_after_backslash(bytes, false);
-                }
-                return backslash(self, bytes);
-            }
-            if !b.is_ascii() {
-                #[cold]
-                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) {
-                    lexer.identifier_tail_after_unicode_byte(bytes);
-                }
-                return unicode(self, bytes);
-            }
-            break;
-        }
-
-        // End of identifier found
-        self.current.chars = std::str::from_utf8_unchecked(bytes.as_slice()).chars();
     }
 
     /// Handle identifier after 1st char dealt with.
@@ -578,7 +544,6 @@ impl<'a> Lexer<'a> {
         &mut self,
         bytes: &mut BytesIter<'a>,
     ) -> Option<u8> {
-        // TODO: Convert into `while` loop
         loop {
             match bytes.clone().next() {
                 Some(&b) => {
@@ -1746,14 +1711,7 @@ ascii_byte_handler!(HAS(lexer) {
 });
 
 // `A..=Z`, `a..=z` (except special cases below), `_`, `$`
-/*
 ascii_identifier_handler!(IDT(_id_without_first_char) {
-    Kind::Ident
-});
-*/
-ascii_byte_handler!(IDT(lexer) {
-    // Safety: This handler is only called with ASCII characters
-    unsafe { lexer.identifier_name_handler_anon() };
     Kind::Ident
 });
 
