@@ -547,19 +547,13 @@ impl<'a> Lexer<'a> {
         &mut self,
         bytes: &mut BytesIter<'a>,
     ) -> Option<u8> {
-        loop {
-            match bytes.clone().next() {
-                Some(&b) => {
-                    if !is_identifier_part_ascii_byte(b) {
-                        return Some(b);
-                    }
-                    bytes.next();
-                }
-                None => {
-                    return None;
-                }
+        while let Some(&b) = bytes.clone().next() {
+            if !is_identifier_part_ascii_byte(b) {
+                return Some(b);
             }
+            bytes.next();
         }
+        None
     }
 
     /// End of identifier found.
