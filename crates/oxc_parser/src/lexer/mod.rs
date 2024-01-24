@@ -566,9 +566,6 @@ impl<'a> Lexer<'a> {
     /// Consume bytes from `Bytes` iterator which are ASCII identifier part bytes.
     /// `bytes` iterator is left positioned on next non-matching byte.
     /// Returns next non-matching byte, or `None` if EOF.
-    // `#[inline]` because we want this inlined into `identifier_tail_after_no_escape`,
-    // which is on the fast path for common cases.
-    #[inline]
     fn identifier_consume_ascii_identifier_bytes(
         &mut self,
         bytes: &mut BytesIter<'a>,
