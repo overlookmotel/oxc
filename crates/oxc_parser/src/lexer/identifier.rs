@@ -70,8 +70,6 @@ impl<'a> Lexer<'a> {
             break;
         }
 
-        // TODO: Check if handling EOF separately is faster.
-
         // End of identifier found (which may be EOF).
         // Advance `self.current.chars` up to after end of identifier.
         let after_identifier = bytes.as_slice();
