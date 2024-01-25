@@ -160,13 +160,11 @@ impl<'a> Lexer<'a> {
             for i in 0..16 {
                 #[inline(always)]
                 fn is_identifier_part_ascii_byte(b: u8) -> u8 {
-                    u8::from(
-                        b == b'_'
-                            || b == b'$'
-                            || b.wrapping_sub(b'A') < 26
-                            || b.wrapping_sub(b'a') < 26
-                            || b.wrapping_sub(b'0') < 10,
-                    ) * 0xFF
+                    (u8::from(b.wrapping_sub(b'A') < 26) * 0xFF)
+                        | (u8::from(b.wrapping_sub(b'a') < 26) * 0xFF)
+                        | (u8::from(b.wrapping_sub(b'0') < 10) * 0xFF)
+                        | (u8::from(b == b'_') * 0xFF)
+                        | (u8::from(b == b'$') * 0xFF)
                 }
                 // SAFETY: We know for sure slice is at least 16 bytes long
                 unsafe {
