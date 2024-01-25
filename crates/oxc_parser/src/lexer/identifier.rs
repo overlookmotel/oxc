@@ -137,13 +137,52 @@ impl<'a> Lexer<'a> {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn identifier_tail_consume_ascii2(bytes: &mut BytesIter) -> Option<u8> {
-        while let Some(b) = bytes.peek() {
-            if !is_identifier_part_ascii_byte(b) {
-                return Some(b);
+        loop {
+            // Scalar version when we don't have 16 bytes left before EOF
+            if bytes.len() < 16 {
+                #[cold]
+                fn scalar(bytes: &mut BytesIter) -> Option<u8> {
+                    while let Some(b) = bytes.peek() {
+                        if !is_identifier_part_ascii_byte(b) {
+                            return Some(b);
+                        }
+                        bytes.next();
+                    }
+                    None
+                }
+                return scalar(bytes);
             }
-            bytes.next();
+
+            // Poor man's SIMD
+            let slice = bytes.as_slice();
+            let mut mask = AlignedBytes([0; 16]);
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..16 {
+                mask.0[i] = u8::from(is_identifier_part_ascii_byte(slice[i])) * 0xFF;
+            }
+
+            let u = u128::from_le_bytes(mask.0);
+
+            #[cfg(target_endian = "little")]
+            let set_bits = u.trailing_ones();
+            #[cfg(target_endian = "big")]
+            let set_bits = u.leading_ones();
+
+            if set_bits == 16 * 8 {
+                // SAFETY: All bytes encountered were ASCII, so safe to slice them off
+                *bytes = unsafe { BytesIter::from(std::str::from_utf8_unchecked(&slice[16..])) };
+                continue;
+            }
+
+            let index = set_bits as usize / 8;
+            debug_assert!(index < 16);
+            // SAFETY: We know there's at least 1 byte left as we had 16 to start with
+            // and we already tested we've consumed less than that.
+            unsafe {
+                *bytes = BytesIter::from_slice(&slice[index..]);
+                return Some(bytes.peek_unchecked());
+            }
         }
-        None
     }
 
     /// End of identifier found.

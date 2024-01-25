@@ -62,8 +62,18 @@ impl<'a> BytesIter<'a> {
     }
 
     #[inline]
+    pub unsafe fn peek_unchecked(&self) -> u8 {
+        *self.as_slice().get_unchecked(0)
+    }
+
+    #[inline]
     pub fn peek_char(&self) -> Option<char> {
         self.chars().and_then(|mut chars| chars.next())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.as_slice().len()
     }
 
     #[inline]
@@ -112,5 +122,11 @@ impl<'a> BytesIter<'a> {
     #[inline]
     pub fn as_ptr(&self) -> *const u8 {
         self.as_slice().as_ptr()
+    }
+
+    /// SAFETY: Slice must contain the bytes of a valid UTF-8 string.
+    #[inline]
+    pub unsafe fn from_slice(slice: &'a [u8]) -> Self {
+        Self::from(std::str::from_utf8_unchecked(slice))
     }
 }
