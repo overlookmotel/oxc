@@ -34,7 +34,7 @@ impl<'a> Lexer<'a> {
     ///    at the cost of speed, but they handle only rare cases anyway.
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
-        const BATCH_SIZE: usize = 4;
+        const BATCH_SIZE: usize = 16;
 
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
@@ -50,20 +50,13 @@ impl<'a> Lexer<'a> {
         let mut next_byte = 0;
         'outer: loop {
             if end as usize - curr as usize >= BATCH_SIZE {
-                // Test batch without branching
-                let mut found_at = BATCH_SIZE;
-                for i in (0..BATCH_SIZE).rev() {
-                    let b = curr.add(i).read();
+                for _i in 0..BATCH_SIZE {
+                    let b = curr.read();
                     if !is_identifier_part_ascii_byte(b) {
-                        found_at = i;
+                        next_byte = b;
+                        break 'outer;
                     }
-                }
-
-                curr = curr.add(found_at);
-
-                if found_at < BATCH_SIZE {
-                    next_byte = curr.read();
-                    break;
+                    curr = curr.add(1);
                 }
             } else {
                 loop {
