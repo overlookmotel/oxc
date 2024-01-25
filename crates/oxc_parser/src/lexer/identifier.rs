@@ -10,6 +10,9 @@ use oxc_syntax::identifier::{
 
 const MIN_ESCAPED_STR_LEN: usize = 16;
 
+#[repr(C, align(16))]
+struct AlignedBytes([u8; 16]);
+
 impl<'a> Lexer<'a> {
     /// Handle identifier with ASCII start character.
     /// Returns text of the identifier, minus its first char.
@@ -119,7 +122,7 @@ impl<'a> Lexer<'a> {
     /// Consume bytes from `Bytes` iterator which are ASCII identifier part bytes.
     /// `bytes` iterator is left positioned on next non-matching byte.
     /// Returns next non-matching byte, or `None` if EOF.
-    fn identifier_tail_consume_ascii(bytes: &mut BytesIter<'a>) -> Option<u8> {
+    fn identifier_tail_consume_ascii(bytes: &mut BytesIter) -> Option<u8> {
         while let Some(b) = bytes.peek() {
             if !is_identifier_part_ascii_byte(b) {
                 return Some(b);
@@ -133,7 +136,7 @@ impl<'a> Lexer<'a> {
     /// `#[inline(always)]` to inline into `identifier_name_handler`.
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    fn identifier_tail_consume_ascii2(bytes: &mut BytesIter<'a>) -> Option<u8> {
+    fn identifier_tail_consume_ascii2(bytes: &mut BytesIter) -> Option<u8> {
         while let Some(b) = bytes.peek() {
             if !is_identifier_part_ascii_byte(b) {
                 return Some(b);
@@ -214,7 +217,7 @@ impl<'a> Lexer<'a> {
     /// Consume unicode character from `bytes` if it's part of identifier.
     /// Returns `true` if at end of identifier (this character is not part of identifier)
     /// or `false` if character was consumed and potentially more of identifier still to come.
-    fn identifier_consume_unicode_char_if_identifier_part(bytes: &mut BytesIter<'a>) -> bool {
+    fn identifier_consume_unicode_char_if_identifier_part(bytes: &mut BytesIter) -> bool {
         let c = bytes.peek_char().unwrap();
         if is_identifier_part_unicode(c) {
             // Advance `bytes` iterator past this character
