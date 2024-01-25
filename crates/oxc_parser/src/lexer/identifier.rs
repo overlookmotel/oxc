@@ -10,8 +10,13 @@ use oxc_syntax::identifier::{
 
 const MIN_ESCAPED_STR_LEN: usize = 16;
 
-#[repr(C, align(16))]
-struct AlignedBytes([u8; 16]);
+const SIMD_LANES: usize = 32;
+
+#[repr(C, align(32))]
+struct AlignedBytes([u8; 32]);
+
+const _: () = assert!(std::mem::size_of::<AlignedBytes>() == SIMD_LANES);
+const _: () = assert!(std::mem::align_of::<AlignedBytes>() == SIMD_LANES);
 
 impl<'a> Lexer<'a> {
     /// Handle identifier with ASCII start character.
@@ -138,8 +143,8 @@ impl<'a> Lexer<'a> {
     #[inline(always)]
     fn identifier_tail_consume_ascii2(bytes: &mut BytesIter) -> Option<u8> {
         loop {
-            // Scalar version when we don't have 16 bytes left before EOF
-            if bytes.len() < 16 {
+            // Scalar version when we don't have enough bytes left before EOF
+            if bytes.len() < SIMD_LANES {
                 #[cold]
                 fn scalar(bytes: &mut BytesIter) -> Option<u8> {
                     while let Some(b) = bytes.peek() {
@@ -155,9 +160,9 @@ impl<'a> Lexer<'a> {
 
             // Poor man's SIMD
             let slice = bytes.as_slice();
-            let mut mask = AlignedBytes([0; 16]);
+            let mut mask = AlignedBytes([0; SIMD_LANES]);
             #[allow(clippy::needless_range_loop)]
-            for i in 0..16 {
+            for i in 0..SIMD_LANES {
                 #[inline(always)]
                 fn is_identifier_part_ascii_byte(b: u8) -> u8 {
                     (u8::from(b.wrapping_sub(b'A') < 26) * 0xFF)
@@ -166,30 +171,47 @@ impl<'a> Lexer<'a> {
                         | (u8::from(b == b'_') * 0xFF)
                         | (u8::from(b == b'$') * 0xFF)
                 }
-                // SAFETY: We know for sure slice is at least 16 bytes long
+                // SAFETY: We know for sure slice is at least `SIMD_LANES` bytes long
                 unsafe {
                     mask.0[i] = is_identifier_part_ascii_byte(*slice.get_unchecked(i));
                 }
             }
 
-            let u = u128::from_le_bytes(mask.0);
-            if u == 0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF {
-                // SAFETY: All bytes encountered were ASCII, so safe to slice them off
-                *bytes = unsafe {
-                    BytesIter::from(std::str::from_utf8_unchecked(slice.get_unchecked(16..)))
-                };
-                continue;
-            }
+            // SAFETY: Same size
+            let u: [u128; 2] = unsafe { std::mem::transmute(mask) };
 
             #[cfg(target_endian = "little")]
-            let set_bits = u.trailing_ones();
+            #[allow(clippy::items_after_statements)]
+            #[inline(always)]
+            fn get_index(u: u128) -> usize {
+                (u.trailing_ones() / 8) as usize
+            }
             #[cfg(target_endian = "big")]
-            let set_bits = u.leading_ones();
+            #[allow(clippy::items_after_statements)]
+            #[inline(always)]
+            fn get_index(u: u128) -> usize {
+                (u.leading_ones() / 8) as usize
+            }
 
-            let index = set_bits as usize / 8;
-            debug_assert!(index < 16);
-            // SAFETY: We know there's at least 1 byte left as we had 16 to start with
-            // and we already tested we've consumed less than that.
+            let index = if u[0] == u128::MAX {
+                if u[1] == u128::MAX {
+                    // SAFETY: All bytes encountered were ASCII, so safe to slice them off
+                    *bytes = unsafe {
+                        BytesIter::from(std::str::from_utf8_unchecked(
+                            slice.get_unchecked(SIMD_LANES..),
+                        ))
+                    };
+                    continue;
+                }
+
+                get_index(u[1]) + 16
+            } else {
+                get_index(u[0])
+            };
+
+            debug_assert!(index < SIMD_LANES);
+            // SAFETY: We know there's at least 1 byte left as we had `SIMD_LANES` bytes to start with
+            // and we already tested we've consumed less than that
             unsafe {
                 *bytes = BytesIter::from_slice(slice.get_unchecked(index..));
                 return Some(bytes.peek_unchecked());
