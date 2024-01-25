@@ -93,13 +93,12 @@ impl<'a> Lexer<'a> {
     /// either `#[cold]` or not.
     pub fn identifier_tail_after_no_escape(&mut self, mut bytes: BytesIter<'a>) {
         // Find first byte which isn't valid ASCII identifier part
-        let next_byte =
-            if let Some(b) = Self::identifier_tail_consume_ascii_identifier_bytes(&mut bytes) {
-                b
-            } else {
-                self.identifier_eof();
-                return;
-            };
+        let next_byte = if let Some(b) = Self::identifier_tail_consume_ascii(&mut bytes) {
+            b
+        } else {
+            self.identifier_eof();
+            return;
+        };
 
         // Handle the byte which isn't ASCII identifier part.
         // Most likely we're at the end of the identifier, but handle `\` escape and Unicode chars.
@@ -118,7 +117,7 @@ impl<'a> Lexer<'a> {
     /// Consume bytes from `Bytes` iterator which are ASCII identifier part bytes.
     /// `bytes` iterator is left positioned on next non-matching byte.
     /// Returns next non-matching byte, or `None` if EOF.
-    fn identifier_tail_consume_ascii_identifier_bytes(bytes: &mut BytesIter<'a>) -> Option<u8> {
+    fn identifier_tail_consume_ascii(bytes: &mut BytesIter<'a>) -> Option<u8> {
         while let Some(b) = bytes.peek() {
             if !is_identifier_part_ascii_byte(b) {
                 return Some(b);
@@ -177,12 +176,11 @@ impl<'a> Lexer<'a> {
     fn identifier_tail_consume_until_end_or_escape(bytes: &mut BytesIter<'a>) -> bool {
         loop {
             // Eat ASCII chars from `bytes`
-            let next_byte =
-                if let Some(b) = Self::identifier_tail_consume_ascii_identifier_bytes(bytes) {
-                    b
-                } else {
-                    return true;
-                };
+            let next_byte = if let Some(b) = Self::identifier_tail_consume_ascii(bytes) {
+                b
+            } else {
+                return true;
+            };
 
             if next_byte.is_ascii() {
                 return next_byte != b'\\';
