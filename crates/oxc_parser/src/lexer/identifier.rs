@@ -159,17 +159,18 @@ impl<'a> Lexer<'a> {
             #[allow(clippy::needless_range_loop)]
             for i in 0..16 {
                 #[inline(always)]
-                fn is_identifier_part_ascii_byte(b: u8) -> bool {
-                    b.wrapping_sub(b'A') < 26
-                        || b.wrapping_sub(b'a') < 26
-                        || b.wrapping_sub(b'0') < 10
-                        || b == b'_'
-                        || b == b'$'
+                fn is_identifier_part_ascii_byte(b: u8) -> u8 {
+                    u8::from(
+                        b == b'_'
+                            || b == b'$'
+                            || b.wrapping_sub(b'A') < 26
+                            || b.wrapping_sub(b'a') < 26
+                            || b.wrapping_sub(b'0') < 10,
+                    ) * 0xFF
                 }
                 // SAFETY: We know for sure slice is at least 16 bytes long
                 unsafe {
-                    mask.0[i] =
-                        u8::from(is_identifier_part_ascii_byte(*slice.get_unchecked(i))) * 0xFF;
+                    mask.0[i] = is_identifier_part_ascii_byte(*slice.get_unchecked(i));
                 }
             }
 
