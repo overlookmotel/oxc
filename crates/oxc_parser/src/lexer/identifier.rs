@@ -43,11 +43,11 @@ impl<'a> Lexer<'a> {
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop, except when exiting at EOF.
         #[allow(unused_assignments)]
-        let mut next_byte = 0;
+        let mut next_byte = None;
         loop {
-            if let Some(b) = bytes.peek() {
+            next_byte = bytes.peek();
+            if let Some(b) = next_byte {
                 if !is_identifier_part_ascii_byte(b) {
-                    next_byte = b;
                     break;
                 }
                 bytes.next();
@@ -61,6 +61,7 @@ impl<'a> Lexer<'a> {
         }
 
         // Check for uncommon cases
+        let next_byte = next_byte.unwrap_unchecked();
         if !next_byte.is_ascii() {
             #[cold]
             fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
