@@ -45,22 +45,32 @@ impl<'a> Lexer<'a> {
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         loop {
-            if let Some(b) = bytes.peek() {
-                if !is_identifier_part_ascii_byte(b) {
-                    next_byte = b;
-                    break;
+            // Fast loop to consume `a`-`z` and `A`-`Z`
+            loop {
+                if let Some(b) = bytes.peek() {
+                    if !b.is_ascii_alphabetic() {
+                        next_byte = b;
+                        break;
+                    }
+                    bytes.next();
+                } else {
+                    // EOF.
+                    // Advance `self.current.chars` up to EOF, and return identifier minus first char.
+                    // End of string cannot be in middle of a Unicode byte sequence.
+                    self.current.chars = bytes.chars_unchecked();
+                    return remaining_after_first;
                 }
+            }
+
+            // Check for less common cases
+            if next_byte == b'_' || next_byte == b'$' || next_byte.is_ascii_digit() {
                 bytes.next();
             } else {
-                // EOF.
-                // Advance `self.current.chars` up to EOF, and return identifier minus first char.
-                // End of string cannot be in middle of a Unicode byte sequence.
-                self.current.chars = bytes.chars_unchecked();
-                return remaining_after_first;
+                break;
             }
         }
 
-        // Check for uncommon cases
+        // Check for very uncommon cases
         if !next_byte.is_ascii() {
             #[cold]
             fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
