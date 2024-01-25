@@ -158,6 +158,14 @@ impl<'a> Lexer<'a> {
             let mut mask = AlignedBytes([0; 16]);
             #[allow(clippy::needless_range_loop)]
             for i in 0..16 {
+                #[inline(always)]
+                fn is_identifier_part_ascii_byte(b: u8) -> bool {
+                    // A-Z, a-z
+                    (b.saturating_sub(59) & 31) > 5
+                    // 0-9
+                    || b.wrapping_sub(b'0') < 10
+                    || b == b'_' || b == b'$'
+                }
                 // SAFETY: We know for sure slice is at least 16 bytes long
                 unsafe {
                     mask.0[i] =
