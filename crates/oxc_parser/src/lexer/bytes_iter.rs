@@ -62,6 +62,11 @@ impl<'a> BytesIter<'a> {
     }
 
     #[inline]
+    pub unsafe fn peek_unchecked(&self) -> u8 {
+        *self.as_slice().get_unchecked(0)
+    }
+
+    #[inline]
     pub fn peek_char(&self) -> Option<char> {
         self.chars().and_then(|mut chars| chars.next())
     }

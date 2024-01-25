@@ -40,35 +40,43 @@ impl<'a> Lexer<'a> {
         let remaining_after_first = self.remaining().get_unchecked(1..);
         let mut bytes = BytesIter::from(remaining_after_first);
 
-        // Consume bytes from `bytes` iterator until reach a byte which can't be part of an identifier,
-        // or reaching EOF.
-        // Code paths for Unicode characters and `\` escapes marked `#[cold]` to hint to branch predictor
-        // to expect ASCII chars only, which makes processing ASCII-only identifiers as fast as possible.
-        // NB: `self.current.chars` is *not* advanced in this loop.
-        while let Some(b) = bytes.peek() {
-            if is_identifier_part_ascii_byte(b) {
+        // Consume bytes which are ASCII identifier part.
+        // NB: `self.current.chars` is *not* advanced in this loop, except when exiting at EOF.
+        loop {
+            if let Some(b) = bytes.peek() {
+                if !is_identifier_part_ascii_byte(b) {
+                    break;
+                }
                 bytes.next();
-                continue;
+            } else {
+                // EOF.
+                // Advance `self.current.chars` up to EOF, and return identifier minus first char.
+                // End of string cannot be in middle of a Unicode byte sequence.
+                self.current.chars = bytes.chars_unchecked();
+                return remaining_after_first;
             }
-            if !b.is_ascii() {
-                #[cold]
-                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_tail_unicode(bytes)[1..]
-                }
-                return unicode(self, bytes);
-            }
-            if b == b'\\' {
-                #[cold]
-                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_backslash(bytes, false)[1..]
-                }
-                return backslash(self, bytes);
-            }
-            // ASCII char which is not part of identifier
-            break;
         }
 
-        // End of identifier found (which may be EOF).
+        // Check for uncommon cases
+        // TODO: Check if `bytes.peek().unwrap()` is any slower. If it's not, do that instead.
+        // TODO: Also try writing to `next_byte` var outside loop above.
+        let b = bytes.peek_unchecked();
+        if !b.is_ascii() {
+            #[cold]
+            fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                &lexer.identifier_tail_unicode(bytes)[1..]
+            }
+            return unicode(self, bytes);
+        }
+        if b == b'\\' {
+            #[cold]
+            fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                &lexer.identifier_backslash(bytes, false)[1..]
+            }
+            return backslash(self, bytes);
+        }
+
+        // End of identifier found.
         // Advance `self.current.chars` up to after end of identifier.
         // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
         // bytes from it, so converting `bytes` to `Chars` is safe.
