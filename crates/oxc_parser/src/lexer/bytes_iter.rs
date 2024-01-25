@@ -11,7 +11,6 @@ use std::{
     str::{self, Chars},
 };
 
-// TODO: Rename to `ByteIter`?
 #[derive(Clone)]
 pub struct BytesIter<'a>(slice::Iter<'a, u8>);
 
@@ -74,7 +73,10 @@ impl<'a> BytesIter<'a> {
 
     #[inline]
     fn is_on_utf8_char_boundary(&self) -> bool {
-        // NB: End of string is a valid char boundary
+        // Byte values 0b10xxxxxx (128-191) are UTF-8 continuation bytes.
+        // Byte values above 0b11110111 (> 247) do not occur in UTF-8 strings.
+        // All other byte values are start of a UTF-8 character sequence.
+        // NB: End of string is a valid char boundary.
         self.0.clone().next().map_or(true, |b| !(128..192).contains(b))
     }
 
