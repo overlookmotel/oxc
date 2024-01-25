@@ -71,7 +71,7 @@ impl<'a> Lexer<'a> {
         // End of identifier found (which may be EOF).
         // Advance `self.current.chars` up to after end of identifier.
         // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
-        // bytes from it, so converting `bytes` to a `&str` is safe.
+        // bytes from it, so converting `bytes` to `Chars` is safe.
         self.current.chars = bytes.chars_unchecked();
 
         // Return identifier minus its first char.
