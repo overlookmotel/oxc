@@ -158,28 +158,33 @@ impl<'a> Lexer<'a> {
             let mut mask = AlignedBytes([0; 16]);
             #[allow(clippy::needless_range_loop)]
             for i in 0..16 {
-                mask.0[i] = u8::from(is_identifier_part_ascii_byte(slice[i])) * 0xFF;
+                // SAFETY: We know for sure slice is at least 16 bytes long
+                unsafe {
+                    mask.0[i] =
+                        u8::from(is_identifier_part_ascii_byte(*slice.get_unchecked(i))) * 0xFF;
+                }
             }
 
             let u = u128::from_le_bytes(mask.0);
+            if u == 0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF {
+                // SAFETY: All bytes encountered were ASCII, so safe to slice them off
+                *bytes = unsafe {
+                    BytesIter::from(std::str::from_utf8_unchecked(slice.get_unchecked(16..)))
+                };
+                continue;
+            }
 
             #[cfg(target_endian = "little")]
             let set_bits = u.trailing_ones();
             #[cfg(target_endian = "big")]
             let set_bits = u.leading_ones();
 
-            if set_bits == 16 * 8 {
-                // SAFETY: All bytes encountered were ASCII, so safe to slice them off
-                *bytes = unsafe { BytesIter::from(std::str::from_utf8_unchecked(&slice[16..])) };
-                continue;
-            }
-
             let index = set_bits as usize / 8;
             debug_assert!(index < 16);
             // SAFETY: We know there's at least 1 byte left as we had 16 to start with
             // and we already tested we've consumed less than that.
             unsafe {
-                *bytes = BytesIter::from_slice(&slice[index..]);
+                *bytes = BytesIter::from_slice(slice.get_unchecked(index..));
                 return Some(bytes.peek_unchecked());
             }
         }
