@@ -160,9 +160,9 @@ impl<'a> Lexer<'a> {
     // TODO: Remove `#[cold]`
     #[cold]
     fn identifier_tail_unicode(&mut self, mut bytes: BytesIter<'a>) -> &'a str {
-        let at_end = self.identifier_consume_unicode_char_if_identifier_part(&mut bytes);
+        let at_end = Self::identifier_consume_unicode_char_if_identifier_part(&mut bytes);
         if !at_end {
-            let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
+            let at_end = Self::identifier_tail_consume_until_end_or_escape(&mut bytes);
             if !at_end {
                 return self.identifier_backslash(bytes, false);
             }
@@ -174,7 +174,7 @@ impl<'a> Lexer<'a> {
     /// Consume valid identifier bytes (ASCII or Unicode) from `bytes`
     /// until reach end of identifier or a `\`.
     /// Returns `true` if at end of identifier, or `false` if found `\`.
-    fn identifier_tail_consume_until_end_or_escape(&mut self, bytes: &mut BytesIter<'a>) -> bool {
+    fn identifier_tail_consume_until_end_or_escape(bytes: &mut BytesIter<'a>) -> bool {
         loop {
             // Eat ASCII chars from `bytes`
             let next_byte =
@@ -189,7 +189,7 @@ impl<'a> Lexer<'a> {
             }
 
             // Unicode char
-            let at_end = self.identifier_consume_unicode_char_if_identifier_part(bytes);
+            let at_end = Self::identifier_consume_unicode_char_if_identifier_part(bytes);
             if at_end {
                 return true;
             }
@@ -200,17 +200,11 @@ impl<'a> Lexer<'a> {
     /// Consume unicode character from `bytes` if it's part of identifier.
     /// Returns `true` if at end of identifier (this character is not part of identifier)
     /// or `false` if character was consumed and potentially more of identifier still to come.
-    fn identifier_consume_unicode_char_if_identifier_part(
-        &self,
-        bytes: &mut BytesIter<'a>,
-    ) -> bool {
-        // TODO: Can use `bytes.peek_char()` and `bytes.next_char()`
-        let current_len = bytes.as_ptr() as usize - self.remaining().as_ptr() as usize;
-        let mut chars = self.remaining()[current_len..].chars();
-        let c = chars.next().unwrap();
+    fn identifier_consume_unicode_char_if_identifier_part(bytes: &mut BytesIter<'a>) -> bool {
+        let c = bytes.peek_char().unwrap();
         if is_identifier_part_unicode(c) {
             // Advance `bytes` iterator past this character
-            *bytes = BytesIter::from(chars);
+            bytes.next_char().unwrap();
             false
         } else {
             // Reached end of identifier
@@ -279,7 +273,7 @@ impl<'a> Lexer<'a> {
             // Consume bytes until reach end of identifier or another escape.
             // NB: This does not advance `self.current.chars`, only `bytes`.
             let mut bytes = self.bytes_iter();
-            let at_end = self.identifier_tail_consume_until_end_or_escape(&mut bytes);
+            let at_end = Self::identifier_tail_consume_until_end_or_escape(&mut bytes);
             if at_end {
                 // Add bytes after last escape to `str`, and advance `chars` iterator to end of identifier.
                 // `bumpalo::collections::string::String::push_str` is currently expensive due to
@@ -312,7 +306,7 @@ impl<'a> Lexer<'a> {
                 Kind::PrivateIdentifier
             } else {
                 // Do not consume byte from `bytes`
-                self.private_identifier_not_ascii_id(bytes)
+                self.private_identifier_not_ascii_id()
             }
         } else {
             // EOF
@@ -323,8 +317,8 @@ impl<'a> Lexer<'a> {
     }
 
     #[cold]
-    #[allow(clippy::needless_pass_by_value)] // TODO: Test if faster to pass `bytes` as mut ref
-    fn private_identifier_not_ascii_id(&mut self, bytes: BytesIter<'a>) -> Kind {
+    fn private_identifier_not_ascii_id(&mut self) -> Kind {
+        let mut bytes = self.bytes_iter();
         let b = bytes.peek().unwrap();
         if b == b'\\' {
             // Assume Unicode characters are more common than `\` escapes, so this branch `#[cold]`
@@ -337,12 +331,9 @@ impl<'a> Lexer<'a> {
         }
 
         if !b.is_ascii() {
-            // TODO: Could use `bytes.peek_char()` and `bytes.next_char()` here
-            let mut chars = self.current.chars.clone();
-            let c = chars.next().unwrap();
+            let c = bytes.peek_char().unwrap();
             if is_identifier_start_unicode(c) {
-                // Eat char from `bytes` (but not from `self.current.chars`)
-                let bytes = BytesIter::from(chars);
+                bytes.next_char().unwrap();
                 self.identifier_tail_after_no_escape(bytes);
                 return Kind::PrivateIdentifier;
             }
