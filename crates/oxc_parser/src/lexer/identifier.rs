@@ -42,9 +42,12 @@ impl<'a> Lexer<'a> {
 
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop, except when exiting at EOF.
+        #[allow(unused_assignments)]
+        let mut next_byte = 0;
         loop {
             if let Some(b) = bytes.peek() {
                 if !is_identifier_part_ascii_byte(b) {
+                    next_byte = b;
                     break;
                 }
                 bytes.next();
@@ -58,17 +61,14 @@ impl<'a> Lexer<'a> {
         }
 
         // Check for uncommon cases
-        // TODO: Check if `bytes.peek().unwrap()` is any slower. If it's not, do that instead.
-        // TODO: Also try writing to `next_byte` var outside loop above.
-        let b = bytes.peek_unchecked();
-        if !b.is_ascii() {
+        if !next_byte.is_ascii() {
             #[cold]
             fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
                 &lexer.identifier_tail_unicode(bytes)[1..]
             }
             return unicode(self, bytes);
         }
-        if b == b'\\' {
+        if next_byte == b'\\' {
             #[cold]
             fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
                 &lexer.identifier_backslash(bytes, false)[1..]
