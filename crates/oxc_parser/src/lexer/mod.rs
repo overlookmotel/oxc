@@ -5,6 +5,7 @@
 //!     * [rustc](https://github.com/rust-lang/rust/blob/master/compiler/rustc_lexer/src)
 //!     * [v8](https://v8.dev/blog/scanner)
 
+mod bytes_iter;
 mod identifier;
 mod kind;
 mod number;
@@ -14,8 +15,6 @@ mod trivia_builder;
 
 use rustc_hash::FxHashMap;
 use std::{collections::VecDeque, str::Chars};
-
-type BytesIter<'a> = std::slice::Iter<'a, u8>;
 
 use oxc_allocator::{Allocator, String};
 use oxc_ast::ast::RegExpFlags;
@@ -27,12 +26,12 @@ use oxc_syntax::identifier::{
     TAB, VT,
 };
 
+use self::{bytes_iter::BytesIter, string_builder::AutoCow, trivia_builder::TriviaBuilder};
 pub use self::{
     kind::Kind,
     number::{parse_big_int, parse_float, parse_int},
     token::Token,
 };
-use self::{string_builder::AutoCow, trivia_builder::TriviaBuilder};
 use crate::{diagnostics, MAX_LEN};
 
 #[derive(Debug, Clone)]
@@ -108,6 +107,12 @@ impl<'a> Lexer<'a> {
     /// Remaining string from `Chars`
     pub fn remaining(&self) -> &'a str {
         self.current.chars.as_str()
+    }
+
+    /// Get `BytesIter` for remaining string from `Chars`
+    #[inline]
+    pub fn bytes_iter(&self) -> BytesIter<'a> {
+        BytesIter::from(&self.current.chars)
     }
 
     /// Creates a checkpoint storing the current lexer state.
@@ -396,7 +401,7 @@ impl<'a> Lexer<'a> {
         match c {
             c if is_identifier_start_unicode(c) => {
                 // `bytes` is positioned after this char
-                let bytes = chars.as_str().as_bytes().iter();
+                let bytes = BytesIter::from(chars);
                 self.identifier_tail_after_no_escape(bytes);
                 Kind::Ident
             }
