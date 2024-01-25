@@ -97,6 +97,18 @@ pub static ASCII_CONTINUE: Align64<[bool; 128]> = Align64([
     XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, __, __, __, __, __, // 7
 ]);
 
+const fn extend_to_256_len(src: &Align64<[bool; 128]>) -> Align64<[bool; 256]> {
+    let mut dst = Align64([false; 256]);
+    let mut i = 0;
+    while i < src.0.len() {
+        dst.0[i] = src.0[i];
+        i += 1;
+    }
+    dst
+}
+static ASCII_START_BYTE: Align64<[bool; 256]> = extend_to_256_len(&ASCII_START);
+static ASCII_CONTINUE_BYTE: Align64<[bool; 256]> = extend_to_256_len(&ASCII_CONTINUE);
+
 /// Section 12.7 Detect `IdentifierStartChar`
 #[inline]
 pub fn is_identifier_start(c: char) -> bool {
@@ -118,14 +130,7 @@ pub fn is_identifier_start_unicode(c: char) -> bool {
 
 #[inline]
 pub fn is_identifier_start_ascii_byte(b: u8) -> bool {
-    // TODO: Alternative to cover first 2: `(b.wrapping_sub(b'A') & 0b11011111) < 26`
-    // TODO: Ensure branchless by replacing `||` with `|`?
-    // `a`-`z`
-    b.wrapping_sub(b'a') < 26
-        // `A`-`Z`
-        || b.wrapping_sub(b'A') < 26
-        || b == b'_'
-        || b == b'$'
+    ASCII_START_BYTE.0[b as usize]
 }
 
 /// Section 12.7 Detect `IdentifierPartChar`
@@ -150,16 +155,7 @@ pub fn is_identifier_part_unicode(c: char) -> bool {
 
 #[inline]
 pub fn is_identifier_part_ascii_byte(b: u8) -> bool {
-    // TODO: Alternative to cover first 2: `(b.wrapping_sub(b'A') & 0b11011111) < 26`
-    // TODO: Ensure branchless by replacing `||` with `|`?
-    // `a`-`z`
-    b.wrapping_sub(b'a') < 26
-        // `A`-`Z`
-        || b.wrapping_sub(b'A') < 26
-        // `0`-`9`
-        || b.wrapping_sub(b'0') < 10
-        || b == b'_'
-        || b == b'$'
+    ASCII_CONTINUE_BYTE.0[b as usize]
 }
 
 pub fn is_identifier_name(name: &str) -> bool {
