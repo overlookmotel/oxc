@@ -167,11 +167,11 @@ impl<'a> Lexer<'a> {
                 fn is_identifier_part_ascii_byte(b: u8) -> u8 {
                     u8::from(
                         // Weirdly, the order of these conditions makes a massive impact
-                        b == b'_'
-                            || b == b'$'
-                            || b.wrapping_sub(b'A') < 26
-                            || b.wrapping_sub(b'a') < 26
-                            || b.wrapping_sub(b'0') < 10,
+                        (b == b'_')
+                            | (b == b'$')
+                            | (b.wrapping_sub(b'A') < 26)
+                            | (b.wrapping_sub(b'a') < 26)
+                            | (b.wrapping_sub(b'0') < 10),
                     ) * 0xFF
                 }
                 // SAFETY: We know for sure slice is at least `SIMD_LANES` bytes long
