@@ -10,14 +10,6 @@ use oxc_syntax::identifier::{
 
 const MIN_ESCAPED_STR_LEN: usize = 16;
 
-const SIMD_LANES: usize = 32;
-
-#[repr(C, align(32))]
-struct AlignedBytes([u8; 32]);
-
-const _: () = assert!(std::mem::size_of::<AlignedBytes>() == SIMD_LANES);
-const _: () = assert!(std::mem::align_of::<AlignedBytes>() == SIMD_LANES);
-
 impl<'a> Lexer<'a> {
     /// Handle identifier with ASCII start character.
     /// Returns text of the identifier, minus its first char.
@@ -48,34 +40,32 @@ impl<'a> Lexer<'a> {
         let remaining_after_first = self.remaining().get_unchecked(1..);
         let mut bytes = BytesIter::from(remaining_after_first);
 
-        // Consume bytes from `bytes` iterator until reach a byte which isn't an ASCII identifier part
-        // character, or reach EOF.
-        let next_byte = if let Some(b) = Self::identifier_tail_consume_ascii2(&mut bytes) {
-            b
-        } else {
-            // EOF.
-            // At end of string, so `bytes` can't be positioned in middle of a UTF-8 character.
-            self.current.chars = bytes.chars_unchecked();
-            return remaining_after_first;
-        };
-
-        // Handle the byte which isn't ASCII identifier part.
-        // Most likely we're at the end of the identifier, but handle Unicode chars or `\` escape.
-        // Guide branch predictor not to expect next 2 branches to be taken with `#[cold]`.
-        if !next_byte.is_ascii() {
-            #[cold]
-            fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                &lexer.identifier_tail_unicode(bytes)[1..]
+        // Consume bytes from `bytes` iterator until reach a byte which can't be part of an identifier,
+        // or reaching EOF.
+        // Code paths for Unicode characters and `\` escapes marked `#[cold]` to hint to branch predictor
+        // to expect ASCII chars only, which makes processing ASCII-only identifiers as fast as possible.
+        // NB: `self.current.chars` is *not* advanced in this loop.
+        while let Some(b) = bytes.peek() {
+            if is_identifier_part_ascii_byte(b) {
+                bytes.next();
+                continue;
             }
-            return unicode(self, bytes);
-        }
-
-        if next_byte == b'\\' {
-            #[cold]
-            fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                &lexer.identifier_backslash(bytes, false)[1..]
+            if !b.is_ascii() {
+                #[cold]
+                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_tail_unicode(bytes)[1..]
+                }
+                return unicode(self, bytes);
             }
-            return backslash(self, bytes);
+            if b == b'\\' {
+                #[cold]
+                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                    &lexer.identifier_backslash(bytes, false)[1..]
+                }
+                return backslash(self, bytes);
+            }
+            // ASCII char which is not part of identifier
+            break;
         }
 
         // End of identifier found (which may be EOF).
@@ -127,7 +117,7 @@ impl<'a> Lexer<'a> {
     /// Consume bytes from `Bytes` iterator which are ASCII identifier part bytes.
     /// `bytes` iterator is left positioned on next non-matching byte.
     /// Returns next non-matching byte, or `None` if EOF.
-    fn identifier_tail_consume_ascii(bytes: &mut BytesIter) -> Option<u8> {
+    fn identifier_tail_consume_ascii(bytes: &mut BytesIter<'a>) -> Option<u8> {
         while let Some(b) = bytes.peek() {
             if !is_identifier_part_ascii_byte(b) {
                 return Some(b);
@@ -135,91 +125,6 @@ impl<'a> Lexer<'a> {
             bytes.next();
         }
         None
-    }
-
-    // TODO: Combine with function above
-    /// `#[inline(always)]` to inline into `identifier_name_handler`.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    fn identifier_tail_consume_ascii2(bytes: &mut BytesIter) -> Option<u8> {
-        loop {
-            // Scalar version when we don't have enough bytes left before EOF
-            if bytes.len() < SIMD_LANES {
-                #[cold]
-                fn scalar(bytes: &mut BytesIter) -> Option<u8> {
-                    while let Some(b) = bytes.peek() {
-                        if !is_identifier_part_ascii_byte(b) {
-                            return Some(b);
-                        }
-                        bytes.next();
-                    }
-                    None
-                }
-                return scalar(bytes);
-            }
-
-            // Poor man's SIMD
-            let slice = bytes.as_slice();
-            let mut mask = AlignedBytes([0; SIMD_LANES]);
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..SIMD_LANES {
-                #[inline(always)]
-                fn is_identifier_part_ascii_byte(b: u8) -> u8 {
-                    u8::from(
-                        // Weirdly, the order of these conditions makes a massive impact
-                        (b == b'_')
-                            | (b == b'$')
-                            | (b.wrapping_sub(b'A') < 26)
-                            | (b.wrapping_sub(b'a') < 26)
-                            | (b.wrapping_sub(b'0') < 10),
-                    ) * 0xFF
-                }
-                // SAFETY: We know for sure slice is at least `SIMD_LANES` bytes long
-                unsafe {
-                    mask.0[i] = is_identifier_part_ascii_byte(*slice.get_unchecked(i));
-                }
-            }
-
-            // SAFETY: Same size
-            let u: [u128; 2] = unsafe { std::mem::transmute(mask) };
-
-            #[cfg(target_endian = "little")]
-            #[allow(clippy::items_after_statements)]
-            #[inline(always)]
-            fn get_index(u: u128) -> usize {
-                (u.trailing_ones() / 8) as usize
-            }
-            #[cfg(target_endian = "big")]
-            #[allow(clippy::items_after_statements)]
-            #[inline(always)]
-            fn get_index(u: u128) -> usize {
-                (u.leading_ones() / 8) as usize
-            }
-
-            let index = if u[0] == u128::MAX {
-                if u[1] == u128::MAX {
-                    // SAFETY: All bytes encountered were ASCII, so safe to slice them off
-                    *bytes = unsafe {
-                        BytesIter::from(std::str::from_utf8_unchecked(
-                            slice.get_unchecked(SIMD_LANES..),
-                        ))
-                    };
-                    continue;
-                }
-
-                get_index(u[1]) + 16
-            } else {
-                get_index(u[0])
-            };
-
-            debug_assert!(index < SIMD_LANES);
-            // SAFETY: We know there's at least 1 byte left as we had `SIMD_LANES` bytes to start with
-            // and we already tested we've consumed less than that
-            unsafe {
-                *bytes = BytesIter::from_slice(slice.get_unchecked(index..));
-                return Some(bytes.peek_unchecked());
-            }
-        }
     }
 
     /// End of identifier found.
@@ -293,7 +198,7 @@ impl<'a> Lexer<'a> {
     /// Consume unicode character from `bytes` if it's part of identifier.
     /// Returns `true` if at end of identifier (this character is not part of identifier)
     /// or `false` if character was consumed and potentially more of identifier still to come.
-    fn identifier_consume_unicode_char_if_identifier_part(bytes: &mut BytesIter) -> bool {
+    fn identifier_consume_unicode_char_if_identifier_part(bytes: &mut BytesIter<'a>) -> bool {
         let c = bytes.peek_char().unwrap();
         if is_identifier_part_unicode(c) {
             // Advance `bytes` iterator past this character
