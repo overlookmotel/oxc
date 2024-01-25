@@ -40,32 +40,35 @@ impl<'a> Lexer<'a> {
         let remaining_after_first = self.remaining().get_unchecked(1..);
         let mut bytes = BytesIter::from(remaining_after_first);
 
-        // Consume bytes from `bytes` iterator until reach a byte which can't be part of an identifier,
-        // or reaching EOF.
-        // Code paths for Unicode characters and `\` escapes marked `#[cold]` to hint to branch predictor
-        // to expect ASCII chars only, which makes processing ASCII-only identifiers as fast as possible.
-        // NB: `self.current.chars` is *not* advanced in this loop.
-        while let Some(b) = bytes.peek() {
-            if is_identifier_part_ascii_byte(b) {
-                bytes.next();
-                continue;
+        // Consume bytes from `bytes` iterator until reach a byte which isn't an ASCII identifier part
+        // character, or reach EOF.
+        let next_byte = if let Some(b) = Self::identifier_tail_consume_ascii2(&mut bytes) {
+            b
+        } else {
+            // EOF.
+            // At end of string, so `bytes` can't be positioned in middle of a UTF-8 character,
+            // so safe to convert `bytes` to `Chars` without checks.
+            self.current.chars = bytes.chars_unchecked();
+            return remaining_after_first;
+        };
+
+        // Handle the byte which isn't ASCII identifier part.
+        // Most likely we're at the end of the identifier, but handle Unicode chars or `\` escape.
+        // Guide branch predictor not to expect next 2 branches to be taken with `#[cold]`.
+        if !next_byte.is_ascii() {
+            #[cold]
+            fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                &lexer.identifier_tail_unicode(bytes)[1..]
             }
-            if !b.is_ascii() {
-                #[cold]
-                fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_tail_unicode(bytes)[1..]
-                }
-                return unicode(self, bytes);
+            return unicode(self, bytes);
+        }
+
+        if next_byte == b'\\' {
+            #[cold]
+            fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+                &lexer.identifier_backslash(bytes, false)[1..]
             }
-            if b == b'\\' {
-                #[cold]
-                fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
-                    &lexer.identifier_backslash(bytes, false)[1..]
-                }
-                return backslash(self, bytes);
-            }
-            // ASCII char which is not part of identifier
-            break;
+            return backslash(self, bytes);
         }
 
         // End of identifier found (which may be EOF).
@@ -118,6 +121,20 @@ impl<'a> Lexer<'a> {
     /// `bytes` iterator is left positioned on next non-matching byte.
     /// Returns next non-matching byte, or `None` if EOF.
     fn identifier_tail_consume_ascii(bytes: &mut BytesIter<'a>) -> Option<u8> {
+        while let Some(b) = bytes.peek() {
+            if !is_identifier_part_ascii_byte(b) {
+                return Some(b);
+            }
+            bytes.next();
+        }
+        None
+    }
+
+    // TODO: Combine with function above
+    /// `#[inline(always)]` to inline into `identifier_name_handler`.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn identifier_tail_consume_ascii2(bytes: &mut BytesIter<'a>) -> Option<u8> {
         while let Some(b) = bytes.peek() {
             if !is_identifier_part_ascii_byte(b) {
                 return Some(b);
