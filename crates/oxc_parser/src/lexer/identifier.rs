@@ -46,8 +46,7 @@ impl<'a> Lexer<'a> {
             b
         } else {
             // EOF.
-            // At end of string, so `bytes` can't be positioned in middle of a UTF-8 character,
-            // so safe to convert `bytes` to `Chars` without checks.
+            // At end of string, so `bytes` can't be positioned in middle of a UTF-8 character.
             self.current.chars = bytes.chars_unchecked();
             return remaining_after_first;
         };
