@@ -50,13 +50,20 @@ impl<'a> Lexer<'a> {
         let mut next_byte = 0;
         'outer: loop {
             if end as usize - curr as usize >= BATCH_SIZE {
-                for _i in 0..BATCH_SIZE {
-                    let b = curr.read();
+                // Test batch without branching
+                let mut found_at = BATCH_SIZE;
+                for i in (0..BATCH_SIZE).rev() {
+                    let b = curr.add(i).read();
                     if !is_identifier_part_ascii_byte(b) {
-                        next_byte = b;
-                        break 'outer;
+                        found_at = i;
                     }
-                    curr = curr.add(1);
+                }
+
+                curr = curr.add(found_at);
+
+                if found_at < BATCH_SIZE {
+                    next_byte = curr.read();
+                    break;
                 }
             } else {
                 loop {
