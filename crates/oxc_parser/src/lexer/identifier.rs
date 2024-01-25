@@ -104,10 +104,10 @@ impl<'a> Lexer<'a> {
         // Handle the byte which isn't ASCII identifier part.
         // Most likely we're at the end of the identifier, but handle `\` escape and Unicode chars.
         // Fast path for normal ASCII identifiers, by marking the 2 uncommon cases `#[cold]`.
-        if next_byte == b'\\' {
-            self.identifier_backslash(bytes, false);
-        } else if !next_byte.is_ascii() {
+        if !next_byte.is_ascii() {
             self.identifier_tail_unicode(bytes);
+        } else if next_byte == b'\\' {
+            self.identifier_backslash(bytes, false);
         } else {
             // End of identifier found.
             // Advance chars iterator to the byte we just found which isn't part of the identifier.
@@ -320,7 +320,14 @@ impl<'a> Lexer<'a> {
     fn private_identifier_not_ascii_id(&mut self) -> Kind {
         let mut bytes = self.bytes_iter();
         let b = bytes.peek().unwrap();
-        if b == b'\\' {
+        if !b.is_ascii() {
+            let c = bytes.peek_char().unwrap();
+            if is_identifier_start_unicode(c) {
+                bytes.next_char().unwrap();
+                self.identifier_tail_after_no_escape(bytes);
+                return Kind::PrivateIdentifier;
+            }
+        } else if b == b'\\' {
             // Assume Unicode characters are more common than `\` escapes, so this branch `#[cold]`
             #[cold]
             fn backslash(lexer: &mut Lexer) -> Kind {
@@ -329,15 +336,6 @@ impl<'a> Lexer<'a> {
             }
             return backslash(self);
         }
-
-        if !b.is_ascii() {
-            let c = bytes.peek_char().unwrap();
-            if is_identifier_start_unicode(c) {
-                bytes.next_char().unwrap();
-                self.identifier_tail_after_no_escape(bytes);
-                return Kind::PrivateIdentifier;
-            }
-        };
 
         // No identifier found
         let start = self.offset();
