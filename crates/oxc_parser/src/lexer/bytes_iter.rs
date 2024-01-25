@@ -37,6 +37,16 @@ impl<'a> From<&Chars<'a>> for BytesIter<'a> {
 
 impl<'a> BytesIter<'a> {
     #[inline]
+    pub unsafe fn from_slice(slice: &'a [u8]) -> Self {
+        Self(slice.iter())
+    }
+
+    #[inline]
+    pub unsafe fn from_ptr_pair(start: *const u8, end: *const u8) -> Self {
+        Self::from_slice(std::slice::from_raw_parts(start, end as usize - start as usize))
+    }
+
+    #[inline]
     pub fn next(&mut self) -> Option<u8> {
         self.0.next().copied()
     }

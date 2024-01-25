@@ -34,58 +34,89 @@ impl<'a> Lexer<'a> {
     ///    at the cost of speed, but they handle only rare cases anyway.
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
+        const BATCH_SIZE: usize = 16;
+
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
         let remaining_after_first = self.remaining().get_unchecked(1..);
-        let mut bytes = BytesIter::from(remaining_after_first);
+
+        let mut curr = remaining_after_first.as_ptr();
+        let end = curr.add(remaining_after_first.len());
 
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop, except when exiting at EOF.
         #[allow(unused_assignments)]
         let mut next_byte = 0;
-        loop {
-            if let Some(b) = bytes.peek() {
-                if !is_identifier_part_ascii_byte(b) {
-                    next_byte = b;
-                    break;
+        'outer: loop {
+            if end as usize - curr as usize >= BATCH_SIZE {
+                for _i in 0..BATCH_SIZE {
+                    let b = curr.read();
+                    if !is_identifier_part_ascii_byte(b) {
+                        next_byte = b;
+                        break 'outer;
+                    }
+                    curr = curr.add(1);
                 }
-                bytes.next();
             } else {
-                // EOF.
-                // Advance `self.current.chars` up to EOF, and return identifier minus first char.
-                // End of string cannot be in middle of a Unicode byte sequence.
-                self.current.chars = bytes.chars_unchecked();
-                return remaining_after_first;
+                loop {
+                    if curr == end {
+                        // EOF.
+                        // Advance `self.current.chars` up to EOF, and return identifier minus first char.
+                        // End of string cannot be in middle of a Unicode byte sequence.
+                        let slice = std::slice::from_raw_parts(end, 0);
+                        let str = std::str::from_utf8_unchecked(slice);
+                        self.current.chars = str.chars();
+                        return remaining_after_first;
+                    }
+
+                    let b = curr.read();
+                    if !is_identifier_part_ascii_byte(b) {
+                        next_byte = b;
+                        break 'outer;
+                    }
+                    curr = curr.add(1);
+                }
             }
         }
 
         // Check for uncommon cases
         if !next_byte.is_ascii() {
             #[cold]
-            fn unicode<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+            unsafe fn unicode<'a>(
+                lexer: &mut Lexer<'a>,
+                curr: *const u8,
+                end: *const u8,
+            ) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, end);
                 &lexer.identifier_tail_unicode(bytes)[1..]
             }
-            return unicode(self, bytes);
+            return unicode(self, curr, end);
         }
         if next_byte == b'\\' {
             #[cold]
-            fn backslash<'a>(lexer: &mut Lexer<'a>, bytes: BytesIter<'a>) -> &'a str {
+            unsafe fn backslash<'a>(
+                lexer: &mut Lexer<'a>,
+                curr: *const u8,
+                end: *const u8,
+            ) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, end);
                 &lexer.identifier_backslash(bytes, false)[1..]
             }
-            return backslash(self, bytes);
+            return backslash(self, curr, end);
         }
 
         // End of identifier found.
         // Advance `self.current.chars` up to after end of identifier.
         // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
         // bytes from it, so converting `bytes` to `Chars` is safe.
-        self.current.chars = bytes.chars_unchecked();
+        let remaining_slice = std::slice::from_raw_parts(curr, end as usize - curr as usize);
+        self.current.chars = std::str::from_utf8_unchecked(remaining_slice).chars();
 
         // Return identifier minus its first char.
         // We know `len` can't cut string in middle of a Unicode character sequence,
         // because we've only found ASCII bytes up to this point.
-        let len_without_first = bytes.as_ptr() as usize - remaining_after_first.as_ptr() as usize;
+        let len_without_first = curr as usize - remaining_after_first.as_ptr() as usize;
         remaining_after_first.get_unchecked(..len_without_first)
     }
 
