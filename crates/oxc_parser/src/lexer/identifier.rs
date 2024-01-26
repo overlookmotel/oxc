@@ -35,23 +35,25 @@ impl<'a> Lexer<'a> {
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
         const BATCH_SIZE: usize = 16;
-        const EOF_SENTINEL: u8 = 255;
-        const _: () = assert!(!EOF_SENTINEL.is_ascii());
 
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
+        // TODO: Just keep start pointer here. That's all that's required later.
+        // Or recalculate start pointer later?
         let remaining_after_first = self.remaining().get_unchecked(1..);
 
         let mut curr = remaining_after_first.as_ptr();
         let end = curr.add(remaining_after_first.len());
 
         // Consume bytes which are ASCII identifier part.
-        // NB: `self.current.chars` is *not* advanced in this loop, except when exiting at EOF.
+        // NB: `self.current.chars` is *not* advanced in this loop.
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         'outer: loop {
             if end as usize - curr as usize >= BATCH_SIZE {
+                // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
+                // The compiler will unroll this loop.
                 for _i in 0..BATCH_SIZE {
                     let b = curr.read();
                     if !is_identifier_part_ascii_byte(b) {
@@ -61,54 +63,27 @@ impl<'a> Lexer<'a> {
                     curr = curr.add(1);
                 }
             } else {
-                #[cold]
-                unsafe fn unbatched(curr: &mut *const u8, end: *const u8, next_byte: &mut u8) {
-                    loop {
-                        if *curr == end {
-                            *next_byte = EOF_SENTINEL;
-                            return;
-                        }
-
-                        let b = (*curr).read();
-                        if !is_identifier_part_ascii_byte(b) {
-                            *next_byte = b;
-                            return;
-                        }
-                        *curr = (*curr).add(1);
-                    }
-                }
-                unbatched(&mut curr, end, &mut next_byte);
-                break;
+                // Not enough bytes remaining to process as a batch.
+                // This branch marked `#[cold]` as should be very uncommon in normal-length JS files.
+                // Very short JS files will be penalized, but they'll be very fast to parse anyway.
+                // TODO: Could extend very short files during parser initialization with a bunch of `\n`s
+                // to remove that problem.
+                return self.identifier_name_handler_unbatched(curr, end);
             }
         }
 
         // Check for uncommon cases
         if !next_byte.is_ascii() {
-            // Either start of Unicode char or EOF
             #[cold]
-            unsafe fn unicode_or_eof<'a>(
+            unsafe fn unicode<'a>(
                 lexer: &mut Lexer<'a>,
-                next_byte: u8,
                 curr: *const u8,
                 end: *const u8,
             ) -> &'a str {
-                if next_byte == EOF_SENTINEL {
-                    // EOF.
-                    // Get identifier minus first char.
-                    // Caller guarantees first char is ASCII.
-                    let id_without_first = lexer.remaining().get_unchecked(1..);
-
-                    // Advance `self.current.chars` up to EOF.
-                    // End of string cannot be in middle of a Unicode byte sequence.
-                    let empty = std::str::from_utf8_unchecked(std::slice::from_raw_parts(end, 0));
-                    lexer.current.chars = empty.chars();
-                    return id_without_first;
-                }
-
                 let bytes = BytesIter::from_ptr_pair(curr, end);
                 &lexer.identifier_tail_unicode(bytes)[1..]
             }
-            return unicode_or_eof(self, next_byte, curr, end);
+            return unicode(self, curr, end);
         }
         if next_byte == b'\\' {
             #[cold]
@@ -124,6 +99,80 @@ impl<'a> Lexer<'a> {
         }
 
         // End of identifier found.
+        // Advance `self.current.chars` up to after end of identifier.
+        // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
+        // bytes from it, so converting `bytes` to `Chars` is safe.
+        let remaining_slice = std::slice::from_raw_parts(curr, end as usize - curr as usize);
+        self.current.chars = std::str::from_utf8_unchecked(remaining_slice).chars();
+
+        // Return identifier minus its first char.
+        // We know `len` can't cut string in middle of a Unicode character sequence,
+        // because we've only found ASCII bytes up to this point.
+        let len_without_first = curr as usize - remaining_after_first.as_ptr() as usize;
+        remaining_after_first.get_unchecked(..len_without_first)
+    }
+
+    #[cold]
+    unsafe fn identifier_name_handler_unbatched(
+        &mut self,
+        mut curr: *const u8,
+        end: *const u8,
+    ) -> &'a str {
+        #[allow(unused_assignments)]
+        let mut next_byte = 0;
+        loop {
+            if curr == end {
+                // EOF.
+                // Get identifier minus first char.
+                // Caller guarantees first char is ASCII.
+                let id_without_first = self.remaining().get_unchecked(1..);
+
+                // Advance `self.current.chars` up to EOF.
+                // End of string cannot be in middle of a Unicode byte sequence.
+                let empty = std::str::from_utf8_unchecked(std::slice::from_raw_parts(end, 0));
+                self.current.chars = empty.chars();
+                return id_without_first;
+            }
+
+            let b = curr.read();
+            if !is_identifier_part_ascii_byte(b) {
+                next_byte = b;
+                break;
+            }
+            curr = curr.add(1);
+        }
+
+        // Check for uncommon cases
+        if !next_byte.is_ascii() {
+            #[cold]
+            unsafe fn unicode<'a>(
+                lexer: &mut Lexer<'a>,
+                curr: *const u8,
+                end: *const u8,
+            ) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, end);
+                &lexer.identifier_tail_unicode(bytes)[1..]
+            }
+            return unicode(self, curr, end);
+        }
+        if next_byte == b'\\' {
+            #[cold]
+            unsafe fn backslash<'a>(
+                lexer: &mut Lexer<'a>,
+                curr: *const u8,
+                end: *const u8,
+            ) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, end);
+                &lexer.identifier_backslash(bytes, false)[1..]
+            }
+            return backslash(self, curr, end);
+        }
+
+        // End of identifier found.
+        // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
+        // because caller guarantees current char is ASCII.
+        let remaining_after_first = self.remaining().get_unchecked(1..);
+
         // Advance `self.current.chars` up to after end of identifier.
         // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
         // bytes from it, so converting `bytes` to `Chars` is safe.
