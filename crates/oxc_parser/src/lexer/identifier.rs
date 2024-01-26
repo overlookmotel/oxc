@@ -103,17 +103,13 @@ impl<'a> Lexer<'a> {
 
         // End of identifier found.
         // Advance `self.current.chars` up to after end of identifier.
-        // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
-        // bytes from it, so converting `bytes` to `Chars` is safe.
-        let remaining_slice = std::slice::from_raw_parts(curr, end as usize - curr as usize);
-        self.current.chars = std::str::from_utf8_unchecked(remaining_slice).chars();
+        // `curr` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII bytes.
+        self.current.chars = str_from_start_and_end(curr, end).chars();
 
         // Return identifier minus its first char.
-        // We know `len` can't cut string in middle of a Unicode character sequence,
-        // because we've only found ASCII bytes up to this point.
-        let id_slice =
-            std::slice::from_raw_parts(after_first, curr as usize - after_first as usize);
-        std::str::from_utf8_unchecked(id_slice)
+        // Caller guarantees 1st char is ASCII, so `after_first` must be on a UTF-8 character boundary.
+        // `curr` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII bytes.
+        str_from_start_and_end(after_first, curr)
     }
 
     #[cold]
@@ -450,4 +446,11 @@ impl<'a> Lexer<'a> {
         self.error(diagnostics::InvalidCharacter(c, Span::new(start, self.offset())));
         Kind::Undetermined
     }
+}
+
+#[allow(clippy::inline_always)]
+#[inline(always)]
+unsafe fn str_from_start_and_end<'a>(start: *const u8, end: *const u8) -> &'a str {
+    let slice = std::slice::from_raw_parts(start, end as usize - start as usize);
+    std::str::from_utf8_unchecked(slice)
 }
