@@ -39,6 +39,7 @@ impl<'a> Lexer<'a> {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
+        // TODO: Try removing the block. Hopefully `remaining` will get dropped immediately.
         let (after_first, end) = {
             let remaining = self.remaining();
             let end = remaining.as_ptr().add(remaining.len());
@@ -55,6 +56,7 @@ impl<'a> Lexer<'a> {
             if end as usize - curr as usize >= BATCH_SIZE {
                 // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
                 // The compiler will unroll this loop.
+                // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
                 for _i in 0..BATCH_SIZE {
                     let b = curr.read();
                     if !is_identifier_part_ascii_byte(b) {
