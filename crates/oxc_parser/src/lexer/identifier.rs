@@ -39,12 +39,13 @@ impl<'a> Lexer<'a> {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
-        // TODO: Just keep start pointer here. That's all that's required later.
-        // Or recalculate start pointer later?
-        let remaining_after_first = self.remaining().get_unchecked(1..);
-
-        let mut curr = remaining_after_first.as_ptr();
-        let end = curr.add(remaining_after_first.len());
+        let (after_first, end) = {
+            let remaining = self.remaining();
+            let end = remaining.as_ptr().add(remaining.len());
+            let after_first = remaining.as_ptr().add(1);
+            (after_first, end)
+        };
+        let mut curr = after_first;
 
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop.
@@ -108,8 +109,9 @@ impl<'a> Lexer<'a> {
         // Return identifier minus its first char.
         // We know `len` can't cut string in middle of a Unicode character sequence,
         // because we've only found ASCII bytes up to this point.
-        let len_without_first = curr as usize - remaining_after_first.as_ptr() as usize;
-        remaining_after_first.get_unchecked(..len_without_first)
+        let id_slice =
+            std::slice::from_raw_parts(after_first, curr as usize - after_first as usize);
+        std::str::from_utf8_unchecked(id_slice)
     }
 
     #[cold]
