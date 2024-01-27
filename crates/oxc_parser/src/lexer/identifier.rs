@@ -1,4 +1,4 @@
-use super::{BytesIter, Kind, Lexer, SEARCH_BATCH_SIZE};
+use super::{BytesIter, Kind, Lexer};
 use crate::diagnostics;
 
 use oxc_allocator::String;
@@ -33,6 +33,7 @@ impl<'a> Lexer<'a> {
     ///    The other identifier functions are more complex and therefore do not use unsafe code,
     ///    at the cost of speed, but they handle only rare cases anyway.
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
+    #[allow(clippy::cognitive_complexity)]
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
@@ -62,14 +63,209 @@ impl<'a> Lexer<'a> {
             // TODO: Re-investigate SIMD v3 approach. It did produce approx 10% speed-up on lexer
             // benchmarks.
             // The compiler will unroll this loop.
-            // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
+
+            // Testing manual unroll of loop
+            /*
             for _i in 0..SEARCH_BATCH_SIZE {
                 next_byte = curr.read();
                 if !is_identifier_part_ascii_byte(next_byte) {
                     break 'outer;
                 }
                 curr = curr.add(1);
+            */
+
+            // Iteration 1
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
             }
+            curr = curr.add(1);
+            // Iteration 2
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 3
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 4
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 5
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 6
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 7
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 8
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 9
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 10
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 11
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 12
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 13
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 14
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 15
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 16
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 17
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 18
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 19
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 20
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 21
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 22
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 23
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 24
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 25
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 26
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 27
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 28
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 29
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 30
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 31
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
+            // Iteration 32
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
+                break 'outer;
+            }
+            curr = curr.add(1);
         }
 
         // Check for uncommon cases
