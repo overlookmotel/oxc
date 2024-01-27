@@ -90,9 +90,11 @@ pub mod __lexer {
     pub use super::lexer::{Kind, Lexer, Token};
 }
 
-/// Maximum length of source in bytes which can be parsed (~4 GiB).
-// Span's start and end are u32s, so size limit is u32::MAX bytes.
-pub const MAX_LEN: usize = u32::MAX as usize;
+/// Maximum length of source in bytes which can be parsed (~4 GiB on 64-bit systems).
+// Span's start and end are `u32`s, so size limit is `u32::MAX` bytes.
+// On 32-bit systems limit is `isize::MAX` due to constraint imposed by allocators.
+pub const MAX_LEN: usize =
+    if std::mem::size_of::<usize>() >= 8 { u32::MAX as usize } else { isize::MAX as usize };
 
 /// Return value of parser consisting of AST, errors and comments
 ///

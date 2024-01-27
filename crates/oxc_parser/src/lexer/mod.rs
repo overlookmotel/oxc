@@ -115,6 +115,15 @@ impl<'a> Lexer<'a> {
         BytesIter::from(&self.current.chars)
     }
 
+    #[inline]
+    pub fn end_ptr(&self) -> *const u8 {
+        let start = self.remaining().as_ptr();
+        let len = self.remaining().len();
+        // Safety: `self.remaining()` returns a string which is necessarily in a single allocation.
+        // `len` cannot exceed `isize::MAX` due to `MAX_LEN` constraint on size of source.
+        unsafe { start.add(len) }
+    }
+
     /// Creates a checkpoint storing the current lexer state.
     /// Use `rewind` to restore the lexer to the state stored in the checkpoint.
     pub fn checkpoint(&self) -> LexerCheckpoint<'a> {
