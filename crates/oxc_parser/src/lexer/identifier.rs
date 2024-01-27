@@ -41,6 +41,10 @@ impl<'a> Lexer<'a> {
         // because caller guarantees current char is ASCII.
         let after_first = self.remaining().as_ptr().add(1);
         let mut curr = after_first;
+        // TODO: This is unsound. If `self.end_ptr() as usize` < `BATCH_SIZE`, it will wrap around.
+        // Then will read a batch which is out of bounds.
+        // `self.end_ptr().saturating_sub(BATCH_SIZE)` solves the problem, but lexer benchmarks drop 2%.
+        // Could store this as property of Lexer, as it never changes.
         let batching_end = self.end_ptr() as usize - BATCH_SIZE;
 
         // Consume bytes which are ASCII identifier part.
