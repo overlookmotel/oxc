@@ -51,26 +51,25 @@ impl<'a> Lexer<'a> {
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         'outer: loop {
-            if curr as usize > batching_end {
+            if curr as usize <= batching_end {
+                // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
+                // The compiler will unroll this loop.
+                // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
+                for _i in 0..BATCH_SIZE {
+                    let b = curr.read();
+                    if !is_identifier_part_ascii_byte(b) {
+                        next_byte = b;
+                        break 'outer;
+                    }
+                    curr = curr.add(1);
+                }
+            } else {
                 // Not enough bytes remaining to process as a batch.
                 // This branch marked `#[cold]` as should be very uncommon in normal-length JS files.
                 // Very short JS files will be penalized, but they'll be very fast to parse anyway.
-                // TODO: Could extend very short files during parser initialization with a bunch of
-                // `\n`s to remove that problem.
+                // TODO: Could extend very short files during parser initialization with a bunch of `\n`s
+                // to remove that problem.
                 return self.identifier_name_handler_unbatched(curr);
-            }
-
-            // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
-            // The compiler will unroll this loop.
-            // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
-            for _i in 0..BATCH_SIZE {
-                let b = curr.read();
-                if !is_identifier_part_ascii_byte(b) {
-                    next_byte = b;
-                    break 'outer;
-                }
-                // Must be in bounds as we already checked whole batch is in bounds
-                curr = curr.add(1);
             }
         }
 
