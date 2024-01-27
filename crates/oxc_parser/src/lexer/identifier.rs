@@ -57,9 +57,8 @@ impl<'a> Lexer<'a> {
                 // The compiler will unroll this loop.
                 // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
                 for _i in 0..BATCH_SIZE {
-                    let b = curr.read();
-                    if !is_identifier_part_ascii_byte(b) {
-                        next_byte = b;
+                    next_byte = curr.read();
+                    if !is_identifier_part_ascii_byte(next_byte) {
                         break 'outer;
                     }
                     curr = curr.add(1);
@@ -121,9 +120,8 @@ impl<'a> Lexer<'a> {
                 return id_without_first;
             }
 
-            let b = curr.read();
-            if !is_identifier_part_ascii_byte(b) {
-                next_byte = b;
+            next_byte = curr.read();
+            if !is_identifier_part_ascii_byte(next_byte) {
                 break;
             }
             curr = curr.add(1);
