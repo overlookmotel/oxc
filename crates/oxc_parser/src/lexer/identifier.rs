@@ -39,17 +39,16 @@ impl<'a> Lexer<'a> {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
-        let remaining = self.remaining();
-        let end = remaining.as_ptr().add(remaining.len());
-        let after_first = remaining.as_ptr().add(1);
+        let after_first = self.remaining().as_ptr().add(1);
         let mut curr = after_first;
+        let batching_end = self.end_ptr() as usize - BATCH_SIZE;
 
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop.
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         'outer: loop {
-            if end as usize - curr as usize >= BATCH_SIZE {
+            if curr as usize <= batching_end {
                 // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
                 // The compiler will unroll this loop.
                 // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
@@ -67,40 +66,32 @@ impl<'a> Lexer<'a> {
                 // Very short JS files will be penalized, but they'll be very fast to parse anyway.
                 // TODO: Could extend very short files during parser initialization with a bunch of `\n`s
                 // to remove that problem.
-                return self.identifier_name_handler_unbatched(curr, end);
+                return self.identifier_name_handler_unbatched(curr);
             }
         }
 
         // Check for uncommon cases
         if !next_byte.is_ascii() {
             #[cold]
-            unsafe fn unicode<'a>(
-                lexer: &mut Lexer<'a>,
-                curr: *const u8,
-                end: *const u8,
-            ) -> &'a str {
-                let bytes = BytesIter::from_ptr_pair(curr, end);
+            unsafe fn unicode<'a>(lexer: &mut Lexer<'a>, curr: *const u8) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, lexer.end_ptr());
                 &lexer.identifier_tail_unicode(bytes)[1..]
             }
-            return unicode(self, curr, end);
+            return unicode(self, curr);
         }
         if next_byte == b'\\' {
             #[cold]
-            unsafe fn backslash<'a>(
-                lexer: &mut Lexer<'a>,
-                curr: *const u8,
-                end: *const u8,
-            ) -> &'a str {
-                let bytes = BytesIter::from_ptr_pair(curr, end);
+            unsafe fn backslash<'a>(lexer: &mut Lexer<'a>, curr: *const u8) -> &'a str {
+                let bytes = BytesIter::from_ptr_pair(curr, lexer.end_ptr());
                 &lexer.identifier_backslash(bytes, false)[1..]
             }
-            return backslash(self, curr, end);
+            return backslash(self, curr);
         }
 
         // End of identifier found.
         // Advance `self.current.chars` up to after end of identifier.
         // `curr` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII bytes.
-        self.current.chars = str_from_start_and_end(curr, end).chars();
+        self.current.chars = str_from_start_and_end(curr, self.end_ptr()).chars();
 
         // Return identifier minus its first char.
         // Caller guarantees 1st char is ASCII, so `after_first` must be on a UTF-8 character boundary.
@@ -109,11 +100,8 @@ impl<'a> Lexer<'a> {
     }
 
     #[cold]
-    unsafe fn identifier_name_handler_unbatched(
-        &mut self,
-        mut curr: *const u8,
-        end: *const u8,
-    ) -> &'a str {
+    unsafe fn identifier_name_handler_unbatched(&mut self, mut curr: *const u8) -> &'a str {
+        let end = self.end_ptr();
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         loop {
@@ -125,8 +113,7 @@ impl<'a> Lexer<'a> {
 
                 // Advance `self.current.chars` up to EOF.
                 // End of string cannot be in middle of a Unicode byte sequence.
-                let empty = std::str::from_utf8_unchecked(std::slice::from_raw_parts(end, 0));
-                self.current.chars = empty.chars();
+                self.current.chars = str_from_start_and_end(end, end).chars();
                 return id_without_first;
             }
 
@@ -165,21 +152,19 @@ impl<'a> Lexer<'a> {
         }
 
         // End of identifier found.
-        // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
-        // because caller guarantees current char is ASCII.
-        let remaining_after_first = self.remaining().get_unchecked(1..);
+        // `self.current.chars` has not been advanced, so guarantee caller of `identifier_name_handler`
+        // made that at least a 1 char remains in source still holds. Therefore `.add(1)` is in bounds.
+        let after_first = self.remaining().as_ptr().add(1);
 
         // Advance `self.current.chars` up to after end of identifier.
-        // `bytes` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
-        // bytes from it, so converting `bytes` to `Chars` is safe.
-        let remaining_slice = std::slice::from_raw_parts(curr, end as usize - curr as usize);
-        self.current.chars = std::str::from_utf8_unchecked(remaining_slice).chars();
+        // `curr` must be positioned on a UTF-8 character boundary, as we've only consumed ASCII
+        // bytes from it. `self.end_ptr()` is end of string so also on a char boundary.
+        self.current.chars = str_from_start_and_end(curr, end).chars();
 
         // Return identifier minus its first char.
-        // We know `len` can't cut string in middle of a Unicode character sequence,
-        // because we've only found ASCII bytes up to this point.
-        let len_without_first = curr as usize - remaining_after_first.as_ptr() as usize;
-        remaining_after_first.get_unchecked(..len_without_first)
+        // `after_first` and `curr` are part of same allocation.
+        // `curr` must be positioned on a UTF-8 character boundary (see above).
+        str_from_start_and_end(after_first, curr)
     }
 
     /// Handle identifier after first char dealt with.
