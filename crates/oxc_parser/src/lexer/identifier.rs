@@ -41,7 +41,10 @@ impl<'a> Lexer<'a> {
         // because caller guarantees current char is ASCII.
         let after_first = self.remaining().as_ptr().add(1);
         let mut curr = after_first;
-        let batching_end = self.end_ptr() as usize - BATCH_SIZE;
+        // NB: `batching_end` must be `usize` not a pointer, otherwise could be out of bounds.
+        // `saturating_sub` so that `curr as usize > batching_end` in loop will be true
+        // even if end pointer is very close to zero.
+        let batching_end = (self.end_ptr() as usize).saturating_sub(BATCH_SIZE);
 
         // Consume bytes which are ASCII identifier part.
         // NB: `self.current.chars` is *not* advanced in this loop.
