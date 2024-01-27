@@ -66,6 +66,8 @@ impl<'a> Lexer<'a> {
                 return self.identifier_name_handler_unbatched(curr);
             }
 
+            // TODO: Re-investigate SIMD v3 approach. It did produce approx 10% speed-up on lexer
+            // benchmarks.
             // The compiler will unroll this loop.
             // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
             for _i in 0..BATCH_SIZE {
