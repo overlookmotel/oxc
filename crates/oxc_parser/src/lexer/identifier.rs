@@ -28,7 +28,7 @@ impl<'a> Lexer<'a> {
     /// Much of this function's code is duplicated in other functions below.
     /// This is not DRY, but is justified for 2 reasons:
     /// 1. Keeping all code for the fast path in a single function produces optimal performance.
-    /// 2. Keeping the core logic of the fast path contained in one place makes it  easier to verify
+    /// 2. Keeping the core logic of the fast path contained in one place makes it easier to verify
     ///    the correctness of the unsafe code which is required for maximum speed.
     ///    The other identifier functions are more complex and therefore do not use unsafe code,
     ///    at the cost of speed, but they handle only rare cases anyway.
