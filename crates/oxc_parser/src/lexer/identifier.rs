@@ -39,13 +39,9 @@ impl<'a> Lexer<'a> {
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
-        // TODO: Try removing the block. Hopefully `remaining` will get dropped immediately.
-        let (after_first, end) = {
-            let remaining = self.remaining();
-            let end = remaining.as_ptr().add(remaining.len());
-            let after_first = remaining.as_ptr().add(1);
-            (after_first, end)
-        };
+        let remaining = self.remaining();
+        let end = remaining.as_ptr().add(remaining.len());
+        let after_first = remaining.as_ptr().add(1);
         let mut curr = after_first;
 
         // Consume bytes which are ASCII identifier part.
