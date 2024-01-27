@@ -48,28 +48,32 @@ impl<'a> Lexer<'a> {
         let batching_end = self.end_ptr() as usize - BATCH_SIZE;
 
         // Consume bytes which are ASCII identifier part.
+        // Process in batches, to avoid bounds check on each turn of the loop.
+        // If not enough bytes remaining for a batch, de-opt and process bytes by byte.
+        // TODO: Could alternatively substitute an "end buffer" when we get to that point, so always
+        // enough bytes for a batch. But would require setting `curr` back to point to corresponding
+        // point in original buffer afterwards for slicing strings at the end to work.
         // NB: `self.current.chars` is *not* advanced in this loop.
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         'outer: loop {
-            if curr as usize <= batching_end {
-                // Process batch of bytes to avoid EOF bounds check on each turn of the loop.
-                // The compiler will unroll this loop.
-                // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
-                for _i in 0..BATCH_SIZE {
-                    next_byte = curr.read();
-                    if !is_identifier_part_ascii_byte(next_byte) {
-                        break 'outer;
-                    }
-                    curr = curr.add(1);
-                }
-            } else {
+            if curr as usize > batching_end {
                 // Not enough bytes remaining to process as a batch.
                 // This branch marked `#[cold]` as should be very uncommon in normal-length JS files.
                 // Very short JS files will be penalized, but they'll be very fast to parse anyway.
                 // TODO: Could extend very short files during parser initialization with a bunch of `\n`s
                 // to remove that problem.
                 return self.identifier_name_handler_unbatched(curr);
+            }
+
+            // The compiler will unroll this loop.
+            // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
+            for _i in 0..BATCH_SIZE {
+                next_byte = curr.read();
+                if !is_identifier_part_ascii_byte(next_byte) {
+                    break 'outer;
+                }
+                curr = curr.add(1);
             }
         }
 
