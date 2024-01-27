@@ -34,6 +34,8 @@ pub use self::{
 };
 use crate::{diagnostics, MAX_LEN};
 
+const SEARCH_BATCH_SIZE: usize = 32;
+
 #[derive(Debug, Clone)]
 pub struct LexerCheckpoint<'a> {
     /// Remaining chars to be tokenized
@@ -57,6 +59,11 @@ pub struct Lexer<'a> {
     source: &'a str,
 
     source_type: SourceType,
+
+    /// Memory address past which not enough bytes remaining in source to process a batch of
+    /// `SEARCH_BATCH_SIZE` bytes in one go.
+    /// Must be `usize`, not a pointer, as if source is short, pointer could be out of bounds.
+    end_for_batch_search: usize,
 
     current: LexerCheckpoint<'a>,
 
@@ -90,10 +97,23 @@ impl<'a> Lexer<'a> {
             ..Token::default()
         };
         let current = LexerCheckpoint { chars: source.chars(), token, errors_pos: 0 };
+
+        // `saturating_sub` not `wrapping_sub` so that value doesn't wrap around if source
+        // is very shorts and has very low memory address (e.g. 16). If that's the case,
+        // `end_for_batch_search` will be 0, so a test whether any valid pointer is past end
+        // will always test positive, and disable batch search.
+        // TODO: Is this scenario even possible? Can a memory address be so low?
+        // TODO: For this to be reliable/safe, `source` would need to be immutable,
+        // and `current.chars` always derived from `source`.
+        // Enclose these 3 in a structure together which upholds that constraint.
+        let end_for_batch_search =
+            (source.as_ptr() as usize + source.len()).saturating_sub(SEARCH_BATCH_SIZE);
+
         Self {
             allocator,
             source,
             source_type,
+            end_for_batch_search,
             current,
             errors: vec![],
             lookahead: VecDeque::with_capacity(4), // 4 is the maximum lookahead for TypeScript

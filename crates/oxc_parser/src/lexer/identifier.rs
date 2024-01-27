@@ -1,4 +1,4 @@
-use super::{BytesIter, Kind, Lexer};
+use super::{BytesIter, Kind, Lexer, SEARCH_BATCH_SIZE};
 use crate::diagnostics;
 
 use oxc_allocator::String;
@@ -34,18 +34,11 @@ impl<'a> Lexer<'a> {
     ///    at the cost of speed, but they handle only rare cases anyway.
     #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
     pub unsafe fn identifier_name_handler(&mut self) -> &'a str {
-        const BATCH_SIZE: usize = 32;
-
         // Create iterator over remaining bytes, but skipping the first byte.
         // Guaranteed slicing first byte off start will produce a valid UTF-8 string,
         // because caller guarantees current char is ASCII.
         let after_first = self.remaining().as_ptr().add(1);
         let mut curr = after_first;
-        // NB: `batching_end` must be `usize` not a pointer, otherwise could be out of bounds.
-        // `saturating_sub` so that `curr as usize > batching_end` in loop will be true
-        // even if end pointer is very close to zero.
-        // TODO: Could store this as property of Lexer, as it never changes, rather than recalculating each time.
-        let batching_end = (self.end_ptr() as usize).saturating_sub(BATCH_SIZE);
 
         // Consume bytes which are ASCII identifier part.
         // Process in batches, to avoid bounds check on each turn of the loop.
@@ -57,7 +50,7 @@ impl<'a> Lexer<'a> {
         #[allow(unused_assignments)]
         let mut next_byte = 0;
         'outer: loop {
-            if curr as usize > batching_end {
+            if curr as usize > self.end_for_batch_search {
                 // Not enough bytes remaining to process as a batch.
                 // This branch marked `#[cold]` as should be very uncommon in normal-length JS files.
                 // Very short JS files will be penalized, but they'll be very fast to parse anyway.
@@ -70,7 +63,7 @@ impl<'a> Lexer<'a> {
             // benchmarks.
             // The compiler will unroll this loop.
             // TODO: Try repeating this manually or with a macro to make sure it's unrolled.
-            for _i in 0..BATCH_SIZE {
+            for _i in 0..SEARCH_BATCH_SIZE {
                 next_byte = curr.read();
                 if !is_identifier_part_ascii_byte(next_byte) {
                     break 'outer;
