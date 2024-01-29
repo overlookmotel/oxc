@@ -4,7 +4,9 @@ use oxc_span::Span;
 
 use super::kind::Kind;
 
+// Aligning on 16 makes copying `Token` use aligned 16-byte read/store
 #[derive(Debug, Clone, Copy, Default)]
+#[repr(align(16))]
 pub struct Token {
     /// Token Kind
     pub kind: Kind,
