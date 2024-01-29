@@ -4,19 +4,6 @@ use crate::diagnostics;
 use oxc_syntax::identifier::{is_identifier_part, is_identifier_start};
 
 impl<'a> Lexer<'a> {
-    pub fn next_jsx_child(&mut self) -> Token {
-        self.current.token.start = self.offset();
-        let kind = self.read_jsx_child();
-        self.finish_next(kind)
-    }
-
-    /// Expand the current token for `JSXIdentifier`
-    pub fn next_jsx_identifier(&mut self, start_offset: u32) -> Token {
-        let kind = self.read_jsx_identifier(start_offset);
-        self.lookahead.clear();
-        self.finish_next(kind)
-    }
-
     /// `JSXIdentifier` :
     ///   `IdentifierStart`
     ///   `JSXIdentifier` `IdentifierPart`
@@ -37,6 +24,51 @@ impl<'a> Lexer<'a> {
             }
         }
         Kind::Ident
+    }
+
+    /// `JSXDoubleStringCharacters` ::
+    ///   `JSXDoubleStringCharacter` `JSXDoubleStringCharactersopt`
+    /// `JSXDoubleStringCharacter` ::
+    ///   `JSXStringCharacter` but not "
+    /// `JSXSingleStringCharacters` ::
+    ///   `JSXSingleStringCharacter` `JSXSingleStringCharactersopt`
+    /// `JSXSingleStringCharacter` ::
+    ///   `JSXStringCharacter` but not '
+    /// `JSXStringCharacter` ::
+    ///   `SourceCharacter` but not one of `HTMLCharacterReference`
+    pub(super) fn read_jsx_string_literal(&mut self, delimiter: char) -> Kind {
+        let mut builder = AutoCow::new(self);
+        loop {
+            match self.current.chars.next() {
+                Some(c @ ('"' | '\'')) => {
+                    if c == delimiter {
+                        self.save_string(builder.has_escape(), builder.finish_without_push(self));
+                        return Kind::Str;
+                    }
+                    builder.push_matching(c);
+                }
+                Some(other) => {
+                    builder.push_matching(other);
+                }
+                None => {
+                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
+                    return Kind::Undetermined;
+                }
+            }
+        }
+    }
+
+    pub fn next_jsx_child(&mut self) -> Token {
+        self.current.token.start = self.offset();
+        let kind = self.read_jsx_child();
+        self.finish_next(kind)
+    }
+
+    /// Expand the current token for `JSXIdentifier`
+    pub fn next_jsx_identifier(&mut self, start_offset: u32) -> Token {
+        let kind = self.read_jsx_identifier(start_offset);
+        self.lookahead.clear();
+        self.finish_next(kind)
     }
 
     /// [`JSXChild`](https://facebook.github.io/jsx/#prod-JSXChild)
@@ -71,38 +103,6 @@ impl<'a> Lexer<'a> {
                 Kind::JSXText
             }
             None => Kind::Eof,
-        }
-    }
-
-    /// `JSXDoubleStringCharacters` ::
-    ///   `JSXDoubleStringCharacter` `JSXDoubleStringCharactersopt`
-    /// `JSXDoubleStringCharacter` ::
-    ///   `JSXStringCharacter` but not "
-    /// `JSXSingleStringCharacters` ::
-    ///   `JSXSingleStringCharacter` `JSXSingleStringCharactersopt`
-    /// `JSXSingleStringCharacter` ::
-    ///   `JSXStringCharacter` but not '
-    /// `JSXStringCharacter` ::
-    ///   `SourceCharacter` but not one of `HTMLCharacterReference`
-    pub(super) fn read_jsx_string_literal(&mut self, delimiter: char) -> Kind {
-        let mut builder = AutoCow::new(self);
-        loop {
-            match self.current.chars.next() {
-                Some(c @ ('"' | '\'')) => {
-                    if c == delimiter {
-                        self.save_string(builder.has_escape(), builder.finish_without_push(self));
-                        return Kind::Str;
-                    }
-                    builder.push_matching(c);
-                }
-                Some(other) => {
-                    builder.push_matching(other);
-                }
-                None => {
-                    self.error(diagnostics::UnterminatedString(self.unterminated_range()));
-                    return Kind::Undetermined;
-                }
-            }
         }
     }
 }

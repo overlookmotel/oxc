@@ -1,12 +1,6 @@
 use super::{Kind, Lexer, Token};
 
 impl<'a> Lexer<'a> {
-    pub fn next_right_angle(&mut self) -> Token {
-        let kind = self.read_right_angle();
-        self.lookahead.clear();
-        self.finish_next(kind)
-    }
-
     /// Section 12.8 Punctuators
     pub(super) fn read_dot(&mut self) -> Kind {
         if self.peek() == Some('.') && self.peek2() == Some('.') {
@@ -42,6 +36,31 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// returns None for `SingleLineHTMLCloseComment` `-->` in script mode
+    pub(super) fn read_minus(&mut self) -> Option<Kind> {
+        if self.next_eq('-') {
+            // SingleLineHTMLCloseComment `-->` in script mode
+            if self.current.token.is_on_new_line
+                && self.source_type.is_script()
+                && self.next_eq('>')
+            {
+                None
+            } else {
+                Some(Kind::Minus2)
+            }
+        } else if self.next_eq('=') {
+            Some(Kind::MinusEq)
+        } else {
+            Some(Kind::Minus)
+        }
+    }
+
+    pub fn next_right_angle(&mut self) -> Token {
+        let kind = self.read_right_angle();
+        self.lookahead.clear();
+        self.finish_next(kind)
+    }
+
     pub(super) fn read_right_angle(&mut self) -> Kind {
         if self.next_eq('>') {
             if self.next_eq('>') {
@@ -59,25 +78,6 @@ impl<'a> Lexer<'a> {
             Kind::GtEq
         } else {
             Kind::RAngle
-        }
-    }
-
-    /// returns None for `SingleLineHTMLCloseComment` `-->` in script mode
-    pub(super) fn read_minus(&mut self) -> Option<Kind> {
-        if self.next_eq('-') {
-            // SingleLineHTMLCloseComment `-->` in script mode
-            if self.current.token.is_on_new_line
-                && self.source_type.is_script()
-                && self.next_eq('>')
-            {
-                None
-            } else {
-                Some(Kind::Minus2)
-            }
-        } else if self.next_eq('=') {
-            Some(Kind::MinusEq)
-        } else {
-            Some(Kind::Minus)
         }
     }
 }
