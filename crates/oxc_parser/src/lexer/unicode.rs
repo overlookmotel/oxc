@@ -196,10 +196,8 @@ impl<'a> Lexer<'a> {
             return Some(SurrogatePair::CodePoint(high));
         }
 
-        // NB: We know there are at least 4 characters remaining, otherwise `hex_4_digits()`
-        // would have returned `None`, and we would have exited this function already
-        self.consume_char();
-        self.consume_char();
+        self.next_char();
+        self.next_char();
 
         let low = self.hex_4_digits()?;
 
