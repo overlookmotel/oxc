@@ -117,6 +117,7 @@ impl<'a> Source<'a> {
     }
 
     /// Get next char and move `current` on to after it.
+    #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
         self.next_code_point().map(|ch| {
             // SAFETY:
@@ -207,6 +208,7 @@ impl<'a> Source<'a> {
     }
 
     /// Get next char, without consuming it.
+    #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
         self.peek_code_point().map(|ch| {
             // SAFETY:
