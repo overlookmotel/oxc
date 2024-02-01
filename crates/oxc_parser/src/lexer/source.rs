@@ -5,8 +5,8 @@ use crate::MAX_LEN;
 use std::{marker::PhantomData, slice, str};
 
 // TODO: Add comment explaining purpose and invariants of `Source`
-// TODO: Add `debug_assert!()`s for all unsafe operations
 // TODO: Try to speed up reverting to a checkpoint
+// TODO: Use `peek_byte_unchecked` for all pointer reads (for the `debug_assert!()`)
 // TODO: Is `*self.ptr` better than `self.ptr.read()`?
 // TODO: Use `NonNull` for all the pointers?
 
@@ -64,6 +64,7 @@ impl<'a> Source<'a> {
         unsafe {
             let len = self.end as usize - self.ptr as usize;
             let slice = slice::from_raw_parts(self.ptr, len);
+            debug_assert!(slice.is_empty() || !is_utf8_cont_byte(slice[0]));
             str::from_utf8_unchecked(slice)
         }
     }
@@ -89,6 +90,10 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn set_position(&mut self, pos: SourcePosition) {
         // `SourcePosition` always upholds the invariants of `Source`
+        debug_assert!(pos.ptr >= self.start && pos.ptr <= self.end);
+        // SAFETY: We just checked `pos.ptr` is within bounds of source `&str`,
+        // so safe to read from if not at end
+        debug_assert!(pos.ptr == self.end || !is_utf8_cont_byte(unsafe { pos.ptr.read() }));
         self.ptr = pos.ptr;
     }
 
@@ -167,6 +172,7 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
         self.next_code_point().map(|ch| {
+            debug_assert!(char::try_from(ch).is_ok());
             // SAFETY:
             // `Source` is created from a `&str`, so between `start` and `end` must be valid UTF-8.
             // Invariant of `Source` is that `ptr` must always be positioned on a UTF-8 character boundary.
@@ -250,6 +256,7 @@ impl<'a> Source<'a> {
     ///    the UTF-8 character sequence is reached.
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
+        debug_assert!(self.ptr >= self.start && self.ptr < self.end);
         let byte = self.ptr.read();
         self.ptr = self.ptr.add(1);
         byte
@@ -260,6 +267,7 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
         self.peek_code_point().map(|ch| {
+            debug_assert!(char::try_from(ch).is_ok());
             // SAFETY:
             // `Source` is created from a `&str` so between `start` and `end` must be valid UTF-8.
             // Invariant of `Source` is that `ptr` must always be positioned on start
@@ -339,6 +347,7 @@ impl<'a> Source<'a> {
     /// SAFETY: Caller must ensure `ptr < end` i.e. not at end of file.
     #[inline]
     pub(super) unsafe fn peek_byte_unchecked(&self) -> u8 {
+        debug_assert!(self.ptr >= self.start && self.ptr < self.end);
         self.ptr.read()
     }
 }
