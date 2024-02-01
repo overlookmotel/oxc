@@ -37,6 +37,7 @@ impl<'a> Source<'a> {
     }
 
     /// Get entire source as `&str`.
+    #[inline]
     pub(super) fn whole(&self) -> &'a str {
         // SAFETY: `start` and `end` are created from a `&str` in `Source::new`,
         // so guaranteed to be start and end of a valid UTF-8 string.
@@ -48,6 +49,7 @@ impl<'a> Source<'a> {
     }
 
     /// Get remaining source as `&str`.
+    #[inline]
     pub(super) fn remaining(&self) -> &'a str {
         // SAFETY:
         // `start` and `end` are created from a `&str` in `Source::new` so span a single allocation.
