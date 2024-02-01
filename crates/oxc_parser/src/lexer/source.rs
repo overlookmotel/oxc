@@ -63,6 +63,7 @@ impl<'a> Source<'a> {
     }
 
     // Return if at end of source.
+    #[inline]
     pub(super) fn is_eof(&self) -> bool {
         self.ptr == self.end
     }
