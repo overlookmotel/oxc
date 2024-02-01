@@ -67,14 +67,6 @@ impl<'a> Source<'a> {
         self.ptr == self.end
     }
 
-    /// Get current position in source, relative to start of source.
-    #[allow(clippy::cast_possible_truncation)]
-    #[inline]
-    pub(super) fn offset(&self) -> u32 {
-        // Cannot overflow because of `MAX_LEN` check in `Source::new`
-        (self.ptr as usize - self.start as usize) as u32
-    }
-
     /// Get source position.
     /// The `SourcePosition` returned is guaranteed to be within bounds of `&str` that `Source`
     /// was created from, and on a UTF-8 character boundary, so can be used by caller
@@ -91,6 +83,14 @@ impl<'a> Source<'a> {
     pub(super) fn set_position(&mut self, pos: SourcePosition) {
         // `SourcePosition` always upholds the invariants of `Source`
         self.ptr = pos.ptr;
+    }
+
+    /// Get current position in source, relative to start of source.
+    #[allow(clippy::cast_possible_truncation)]
+    #[inline]
+    pub(super) fn offset(&self) -> u32 {
+        // Cannot overflow because of `MAX_LEN` check in `Source::new`
+        (self.ptr as usize - self.start as usize) as u32
     }
 
     /// Move current position in source to an offset.
