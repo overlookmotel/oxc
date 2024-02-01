@@ -263,71 +263,9 @@ impl<'a> Source<'a> {
     }
 
     /// Get next char, without consuming it.
-    // TODO: Implement this as `self.clone().next_char()`?
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
-        self.peek_code_point().map(|ch| {
-            debug_assert!(char::try_from(ch).is_ok());
-            // SAFETY:
-            // `Source` is created from a `&str` so between `start` and `end` must be valid UTF-8.
-            // Invariant of `Source` is that `ptr` must always be positioned on start
-            // of a UTF-8 character sequence.
-            // Therefore `ch` must be a valid Unicode Scalar Value.
-            unsafe { char::from_u32_unchecked(ch) }
-        })
-    }
-
-    /// Peek next code point, without consuming it.
-    /// Copied from implementation of `std::str::Chars`.
-    /// https://doc.rust-lang.org/src/core/str/validations.rs.html#36
-    #[allow(clippy::cast_lossless)]
-    #[inline]
-    fn peek_code_point(&self) -> Option<u32> {
-        // Decode UTF-8
-        let x = self.peek_byte()?;
-        if x < 128 {
-            return Some(x as u32);
-        }
-
-        // TODO: Mark this branch `#[cold]`?
-
-        debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
-
-        let mut ptr = self.ptr;
-        #[allow(clippy::items_after_statements)]
-        #[inline]
-        unsafe fn advance_and_read(ptr: &mut *const u8) -> u8 {
-            *ptr = ptr.add(1);
-            ptr.read()
-        }
-
-        // Multibyte case follows
-        // Decode from a byte combination out of: [[[x y] z] w]
-        // NOTE: Performance is sensitive to the exact formulation here
-        let init = utf8_first_byte(x, 2);
-        // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte is not ASCII,
-        // so guaranteed there is a further byte to be read.
-        let y = unsafe { advance_and_read(&mut ptr) };
-        let mut ch = utf8_acc_cont_byte(init, y);
-        if x >= 0xE0 {
-            // [[x y z] w] case
-            // 5th bit in 0xE0 .. 0xEF is always clear, so `init` is still valid
-            // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte indicates it is start
-            // of a 3 or 4-byte sequence, so guaranteed there is a further byte to be read.
-            let z = unsafe { advance_and_read(&mut ptr) };
-            let y_z = utf8_acc_cont_byte((y & CONT_MASK) as u32, z);
-            ch = init << 12 | y_z;
-            if x >= 0xF0 {
-                // [x y z w] case
-                // use only the lower 3 bits of `init`
-                // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte indicates it is start
-                // of a 4-byte sequence, so guaranteed there is a further byte to be read.
-                let w = unsafe { advance_and_read(&mut ptr) };
-                ch = (init & 7) << 18 | utf8_acc_cont_byte(y_z, w);
-            }
-        }
-
-        Some(ch)
+        self.clone().next_char()
     }
 
     /// Peek next byte of source without consuming it, if not at EOF.
