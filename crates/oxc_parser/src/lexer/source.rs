@@ -2,9 +2,7 @@
 
 use crate::MAX_LEN;
 
-use std::marker::PhantomData;
-use std::slice;
-use std::str;
+use std::{marker::PhantomData, slice, str};
 
 #[derive(Clone)]
 pub(super) struct Source<'a> {
