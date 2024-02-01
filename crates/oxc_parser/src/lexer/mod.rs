@@ -147,6 +147,7 @@ impl<'a> Lexer<'a> {
             return self.lookahead[n - 1].token;
         }
 
+        // TODO: Could just get `token` and `position` here
         let checkpoint = self.checkpoint();
 
         if let Some(checkpoint) = self.lookahead.back() {
@@ -169,6 +170,7 @@ impl<'a> Lexer<'a> {
         }
 
         self.current.token = checkpoint.token;
+        self.source.set_position(checkpoint.position);
         // TODO: What to do about `errors_pos`?
 
         self.lookahead[n - 1].token
