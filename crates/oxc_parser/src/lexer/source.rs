@@ -113,7 +113,7 @@ impl<'a> Source<'a> {
     pub(super) fn set_offset(&mut self, offset: u32) {
         let offset = offset as usize;
         let len = self.end as usize - self.start as usize;
-        assert!(offset <= len);
+        assert!(offset <= len, "Offset is beyond end of source");
         if offset == len {
             // Moving to end, so by definition on a UTF-8 character boundary
             self.ptr = self.end;
@@ -124,7 +124,7 @@ impl<'a> Source<'a> {
             // so valid to read a byte
             let byte = unsafe { new_ptr.read() };
             // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
-            assert!(!is_utf8_cont_byte(byte));
+            assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
             // Move current position. The checks above satisfy `Source`'s invariants.
             self.ptr = new_ptr;
         }
@@ -157,7 +157,7 @@ impl<'a> Source<'a> {
         let byte = unsafe { new_ptr.read() };
 
         // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
-        assert!(!is_utf8_cont_byte(byte));
+        assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
         // Move current position. The checks above satisfy `Source`'s invariants.
         self.ptr = new_ptr;
