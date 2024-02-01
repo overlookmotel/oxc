@@ -61,6 +61,8 @@ pub enum LexerContext {
     JsxAttributeValue,
 }
 
+/// Wrapper around `Token`.
+/// TODO: This serves no purpose and can be replaced with `Token`.
 struct LexerCurrent {
     token: Token,
 }
@@ -68,6 +70,7 @@ struct LexerCurrent {
 pub struct Lexer<'a> {
     allocator: &'a Allocator,
 
+    // Wrapper around source text. Must not be changed after initialization.
     source: Source<'a>,
 
     source_type: SourceType,
@@ -271,14 +274,13 @@ impl<'a> Lexer<'a> {
             let offset = self.offset();
             self.current.token.start = offset;
 
-            let remaining = self.source.remaining();
-            if remaining.is_empty() {
+            let byte = if let Some(byte) = self.source.peek_byte() {
+                byte
+            } else {
                 return Kind::Eof;
-            }
+            };
 
-            let byte = remaining.as_bytes()[0];
-            // SAFETY: Check for `remaining.is_empty()` ensures not at end of file,
-            // and `byte` is the byte at current position of `self.current.chars`.
+            // SAFETY: `byte` is byte value at current position in source
             let kind = unsafe { handle_byte(byte, self) };
             if kind != Kind::Skip {
                 return kind;

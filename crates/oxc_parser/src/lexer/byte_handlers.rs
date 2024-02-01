@@ -6,8 +6,7 @@ use crate::diagnostics;
 ///
 /// SAFETY:
 /// * Lexer must not be at end of file.
-/// * `byte` must be next byte of source code, corresponding to current position
-///   of `lexer.current.chars`.
+/// * `byte` must be next byte of source code, corresponding to current position of `lexer.source`.
 /// * Only `BYTE_HANDLERS` for ASCII characters may use the `ascii_byte_handler!()` macro.
 pub(super) unsafe fn handle_byte(byte: u8, lexer: &mut Lexer) -> Kind {
     BYTE_HANDLERS[byte as usize](lexer)
@@ -47,7 +46,7 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
 ///
 /// These assertions produce no runtime code, but hint to the compiler that it can assume that
 /// next char is ASCII, and it uses that information to optimize the rest of the handler.
-/// e.g. `lexer.current.chars.next()` becomes just a single assembler instruction.
+/// e.g. `lexer.consume_char()` becomes just a single assembler instruction.
 /// Without the assertions, the compiler is unable to deduce the next char is ASCII, due to
 /// the indirection of the `BYTE_HANDLERS` jump table.
 ///

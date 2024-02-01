@@ -53,7 +53,7 @@ impl<'a> Source<'a> {
         // `start` and `end` are created from a `&str` in `Source::new` so span a single allocation.
         // Contract of `Source` is that `ptr` is always `>= start` and `<= end`,
         // so a slice spanning `ptr` to `end` will always be part of of a single allocation.
-        // Contract of `Source` is that `ptr` is always on start of a UTF-8 character sequence,
+        // Contract of `Source` is that `ptr` is always on a UTF-8 character boundary,
         // so slice from `ptr` to `end` will always be a valid UTF-8 string.
         unsafe {
             let len = self.end as usize - self.ptr as usize;
@@ -77,16 +77,19 @@ impl<'a> Source<'a> {
 
     /// Get source position.
     /// The `SourcePosition` returned is guaranteed to be within bounds of `&str` that `Source`
-    /// was created from, and at start of a UTF-8 character sequence, so can be used by caller
-    /// to later change current position of this `Source` using `Source::set_position`.
+    /// was created from, and on a UTF-8 character boundary, so can be used by caller
+    /// to later move current position of this `Source` using `Source::set_position`.
     #[inline]
     pub(super) fn position(&self) -> SourcePosition<'a> {
         SourcePosition { ptr: self.ptr, _marker: PhantomData }
     }
 
     /// Move current position in source.
+    // TODO: Should this be unsafe? It's possible to create a `SourcePosition` from a *different*
+    // `Source`, which would violate `Source`'s invariants.
     #[inline]
     pub(super) fn set_position(&mut self, pos: SourcePosition) {
+        // `SourcePosition` always upholds the invariants of `Source`
         self.ptr = pos.ptr;
     }
 
@@ -97,7 +100,7 @@ impl<'a> Source<'a> {
         let len = self.end as usize - self.start as usize;
         assert!(offset <= len);
         if offset == len {
-            // If moving to end, by definition that's on end of a UTF-8 character sequence
+            // Moving to end, so by definition on a UTF-8 character boundary
             self.ptr = self.end;
         } else {
             // SAFETY: `start + offset` is < `end`, so `new_ptr` is in bounds of original `&str`
@@ -105,8 +108,8 @@ impl<'a> Source<'a> {
             // SAFETY: `new_ptr` is in bounds of original `&str`, and not at the end,
             // so valid to read a byte
             let byte = unsafe { new_ptr.read() };
-            // Enforce invariant that `ptr` must be positioned on start of a UTF-8 character sequence
-            // (128 - 191 are UTF-8 continuation bytes i.e. in middle of a char sequence)
+            // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
+            // (128 - 191 are UTF-8 continuation bytes i.e. not on a UTF-8 character boundary)
             assert!(!(128..192).contains(&byte));
             self.ptr = new_ptr;
         }
@@ -116,9 +119,8 @@ impl<'a> Source<'a> {
     pub(super) fn next_char(&mut self) -> Option<char> {
         self.next_code_point().map(|ch| {
             // SAFETY:
-            // `Source` is created from a `&str` so between `start` and `end` must be valid UTF-8.
-            // Invariant of `Source` is that `ptr` must always be positioned on start
-            // of a UTF-8 character sequence.
+            // `Source` is created from a `&str`, so between `start` and `end` must be valid UTF-8.
+            // Invariant of `Source` is that `ptr` must always be positioned on a UTF-8 character boundary.
             // Therefore `ch` must be a valid Unicode Scalar Value.
             unsafe { char::from_u32_unchecked(ch) }
         })
@@ -132,8 +134,7 @@ impl<'a> Source<'a> {
     fn next_code_point(&mut self) -> Option<u32> {
         // Decode UTF-8.
         // SAFETY: If next byte is not ASCII, this function consumes further bytes until end of UTF-8
-        // character sequence, leaving `ptr` positioned on start of next UTF-8 character sequence,
-        // or at EOF.
+        // character sequence, leaving `ptr` positioned on next UTF-8 character boundary, or at EOF.
         let x = unsafe { self.next_byte() }?;
         if x < 128 {
             return Some(x as u32);
@@ -176,11 +177,12 @@ impl<'a> Source<'a> {
     /// SAFETY:
     /// This function may leave `self.ptr` in middle of a UTF-8 character sequence.
     /// It is caller's responsibility to ensure that either the byte returned is ASCII,
-    /// or make further calls to `next_byte()` or `next_byte_unchecked()` until the end of
-    /// the UTF-8 character sequence is reached.
+    /// or make further calls to `next_byte()` or `next_byte_unchecked()` until `self.ptr`
+    /// is positioned on a UTF-8 character boundary.
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
         if self.ptr == self.end {
+            // TODO: Mark this branch `#[cold]`?
             None
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
@@ -271,6 +273,7 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn peek_byte(&self) -> Option<u8> {
         if self.ptr == self.end {
+            // TODO: Mark this branch `#[cold]`?
             None
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
@@ -287,6 +290,7 @@ impl<'a> Source<'a> {
     }
 }
 
+/// Wrapper around a pointer to a position in `Source`.
 #[derive(Debug, Clone, Copy)]
 pub struct SourcePosition<'a> {
     ptr: *const u8,
