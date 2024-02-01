@@ -4,6 +4,10 @@ use crate::MAX_LEN;
 
 use std::{marker::PhantomData, slice, str};
 
+// TODO: Add `debug_assert!()`s for all unsafe operations
+// TODO: Try to speed up reverting to a checkpoint
+// TODO: Comments for all functions which may panic
+
 #[derive(Clone)]
 pub(super) struct Source<'a> {
     /// Pointer to start of source string. Never altered after initialization.
@@ -209,6 +213,7 @@ impl<'a> Source<'a> {
     }
 
     /// Get next char, without consuming it.
+    // TODO: Implement this as `self.clone().next_char()`?
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
         self.peek_code_point().map(|ch| {
