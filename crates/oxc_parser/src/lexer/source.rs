@@ -110,8 +110,9 @@ impl<'a> Source<'a> {
             // so valid to read a byte
             let byte = unsafe { new_ptr.read() };
             // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
-            // (128 - 191 are UTF-8 continuation bytes i.e. not on a UTF-8 character boundary)
+            // (128 - 191 are UTF-8 continuation bytes i.e. not a UTF-8 character boundary)
             assert!(!(128..192).contains(&byte));
+            // Move current position. The checks above satisfy `Source`'s invariants.
             self.ptr = new_ptr;
         }
     }
