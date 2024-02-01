@@ -99,6 +99,9 @@ impl<'a> Source<'a> {
     }
 
     /// Move current position in source to an offset.
+    //
+    // TODO: Delete this function if not using it.
+    #[allow(dead_code)]
     #[inline]
     pub(super) fn set_offset(&mut self, offset: u32) {
         let offset = offset as usize;
@@ -118,6 +121,39 @@ impl<'a> Source<'a> {
             // Move current position. The checks above satisfy `Source`'s invariants.
             self.ptr = new_ptr;
         }
+    }
+
+    /// Move current position back by `n` bytes.
+    ///
+    /// # Panic
+    /// Panics if:
+    /// * `n` is 0
+    /// * `n` is greater than current offset in source
+    /// * Moving back `n` bytes would not place current position on a UTF-8 character boundary
+    #[inline]
+    pub(super) fn back(&mut self, n: usize) {
+        assert!(n > 0, "Cannot call `Source::back` with 0");
+
+        // Ensure not attempting to go back to before start of source
+        let bytes_consumed = self.ptr as usize - self.start as usize;
+        assert!(
+            n <= bytes_consumed,
+            "Cannot go back {n} bytes - only {bytes_consumed} bytes consumed"
+        );
+
+        // SAFETY: We have checked that `n` is less than distance between `start` and `ptr`,
+        // so this cannot move `ptr` outside of allocation of original `&str`
+        let new_ptr = unsafe { self.ptr.sub(n) };
+
+        // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
+        // not at the end, so valid to read a byte
+        let byte = unsafe { new_ptr.read() };
+
+        // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
+        assert!(!is_utf8_cont_byte(byte));
+
+        // Move current position. The checks above satisfy `Source`'s invariants.
+        self.ptr = new_ptr;
     }
 
     /// Get next char and move `current` on to after it.

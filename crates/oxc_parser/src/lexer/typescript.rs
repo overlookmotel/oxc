@@ -9,7 +9,8 @@ impl<'a> Lexer<'a> {
             _ => unreachable!(),
         };
         self.current.token.start = self.offset() - offset;
-        self.source.set_offset(self.current.token.start + 1);
+        // TODO: Is it better to use `set_offset()`?
+        self.source.back(offset as usize - 1);
         let kind = Kind::LAngle;
         self.lookahead.clear();
         self.finish_next(kind)
