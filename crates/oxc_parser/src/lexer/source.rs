@@ -4,9 +4,11 @@ use crate::MAX_LEN;
 
 use std::{marker::PhantomData, slice, str};
 
+// TODO: Add comment explaining purpose and invariants of `Source`
 // TODO: Add `debug_assert!()`s for all unsafe operations
 // TODO: Try to speed up reverting to a checkpoint
-// TODO: Comments for all functions which may panic
+// TODO: Is `*self.ptr` better than `self.ptr.read()`?
+// TODO: Use `NonNull` for all the pointers?
 
 #[derive(Clone)]
 pub(super) struct Source<'a> {
@@ -94,11 +96,16 @@ impl<'a> Source<'a> {
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub(super) fn offset(&self) -> u32 {
-        // Cannot overflow because of `MAX_LEN` check in `Source::new`
+        // Cannot overflow `u32` because of `MAX_LEN` check in `Source::new`
         (self.ptr as usize - self.start as usize) as u32
     }
 
     /// Move current position in source to an offset.
+    ///
+    /// # Panic
+    /// Panics if:
+    /// * `offset` is after the end of source.
+    /// * Moving to `offset`` would not place current position on a UTF-8 character boundary.
     //
     // TODO: Delete this function if not using it.
     #[allow(dead_code)]
@@ -127,9 +134,9 @@ impl<'a> Source<'a> {
     ///
     /// # Panic
     /// Panics if:
-    /// * `n` is 0
-    /// * `n` is greater than current offset in source
-    /// * Moving back `n` bytes would not place current position on a UTF-8 character boundary
+    /// * `n` is 0.
+    /// * `n` is greater than current offset in source.
+    /// * Moving back `n` bytes would not place current position on a UTF-8 character boundary.
     #[inline]
     pub(super) fn back(&mut self, n: usize) {
         assert!(n > 0, "Cannot call `Source::back` with 0");
