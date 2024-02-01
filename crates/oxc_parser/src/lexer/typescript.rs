@@ -9,7 +9,7 @@ impl<'a> Lexer<'a> {
             _ => unreachable!(),
         };
         self.current.token.start = self.offset() - offset;
-        self.current.chars = self.source[self.current.token.start as usize + 1..].chars();
+        self.source.set_offset(self.current.token.start + 1);
         let kind = Kind::LAngle;
         self.lookahead.clear();
         self.finish_next(kind)

@@ -68,9 +68,8 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
 /// const SPS: ByteHandler = |lexer| {
 ///   unsafe {
 ///     use assert_unchecked::assert_unchecked;
-///     let s = lexer.current.chars.as_str();
-///     assert_unchecked!(!s.is_empty());
-///     assert_unchecked!(s.as_bytes()[0] < 128);
+///     assert_unchecked!(!lexer.source.is_eof());
+///     assert_unchecked!(lexer.source.peek_byte_unchecked() < 128);
 ///   }
 ///   lexer.consume_char();
 ///   Kind::WhiteSpace
@@ -82,9 +81,8 @@ macro_rules! ascii_byte_handler {
             // SAFETY: This macro is only used for ASCII characters
             unsafe {
                 use assert_unchecked::assert_unchecked;
-                let s = $lex.current.chars.as_str();
-                assert_unchecked!(!s.is_empty());
-                assert_unchecked!(s.as_bytes()[0] < 128);
+                assert_unchecked!(!$lex.source.is_eof());
+                assert_unchecked!($lex.source.peek_byte_unchecked() < 128);
             }
             $body
         };
