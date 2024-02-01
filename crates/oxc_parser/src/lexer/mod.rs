@@ -44,7 +44,7 @@ pub use self::{
 };
 use crate::diagnostics;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct LexerCheckpoint<'a> {
     /// Current position in source
     position: SourcePosition<'a>,
@@ -131,6 +131,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Rewinds the lexer to the same state as when the passed in `checkpoint` was created.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn rewind(&mut self, checkpoint: LexerCheckpoint<'a>) {
         self.errors.truncate(checkpoint.errors_pos);
         self.source.set_position(checkpoint.position);
