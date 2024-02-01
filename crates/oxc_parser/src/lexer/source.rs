@@ -110,8 +110,7 @@ impl<'a> Source<'a> {
             // so valid to read a byte
             let byte = unsafe { new_ptr.read() };
             // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
-            // (128 - 191 are UTF-8 continuation bytes i.e. not a UTF-8 character boundary)
-            assert!(!(128..192).contains(&byte));
+            assert!(!is_utf8_cont_byte(byte));
             // Move current position. The checks above satisfy `Source`'s invariants.
             self.ptr = new_ptr;
         }
@@ -143,8 +142,9 @@ impl<'a> Source<'a> {
             return Some(x as u32);
         }
 
-        // `x` is not a UTF-8 continuation byte, and is a valid UTF-8 byte value
-        debug_assert!((192..248).contains(&x));
+        // TODO: Mark this branch `#[cold]`?
+
+        debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
 
         // Multibyte case follows
         // Decode from a byte combination out of: [[[x y] z] w]
@@ -233,8 +233,9 @@ impl<'a> Source<'a> {
             return Some(x as u32);
         }
 
-        // `x` is not a UTF-8 continuation byte, and is a valid UTF-8 byte value
-        debug_assert!((192..248).contains(&x));
+        // TODO: Mark this branch `#[cold]`?
+
+        debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
 
         let mut ptr = self.ptr;
         #[allow(clippy::items_after_statements)]
@@ -322,4 +323,18 @@ const fn utf8_first_byte(byte: u8, width: u32) -> u32 {
 #[inline]
 const fn utf8_acc_cont_byte(ch: u32, byte: u8) -> u32 {
     (ch << 6) | (byte & CONT_MASK) as u32
+}
+
+/// Return if byte is a UTF-8 continuation byte.
+#[inline]
+const fn is_utf8_cont_byte(byte: u8) -> bool {
+    // 0x80 - 0xBF are continuation bytes i.e. not 1st byte of a UTF-8 character sequence
+    byte >= 0x80 && byte < 0xC0
+}
+
+/// Return if byte is a valid UTF-8 byte.
+#[inline]
+const fn is_utf8_valid_byte(byte: u8) -> bool {
+    // All values are valid except 0xF8 - 0xFF
+    byte < 0xF8
 }
