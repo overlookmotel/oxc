@@ -127,11 +127,10 @@ impl<'a> Source<'a> {
         // so this cannot move `ptr` outside of allocation of original `&str`
         let new_ptr = unsafe { self.ptr.sub(n) };
 
+        // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary.
         // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
-        // not at the end, so valid to read a byte
+        // not at the end, so valid to read a byte.
         let byte = unsafe { new_ptr.read() };
-
-        // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
         assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
         // Move current position. The checks above satisfy `Source`'s invariants.
