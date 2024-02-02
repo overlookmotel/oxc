@@ -105,36 +105,6 @@ impl<'a> Source<'a> {
         (self.ptr as usize - self.start as usize) as u32
     }
 
-    /// Move current position in source to an offset.
-    ///
-    /// # Panic
-    /// Panics if:
-    /// * `offset` is after the end of source.
-    /// * Moving to `offset`` would not place current position on a UTF-8 character boundary.
-    //
-    // TODO: Delete this function if not using it.
-    #[allow(dead_code)]
-    #[inline]
-    pub(super) fn set_offset(&mut self, offset: u32) {
-        let offset = offset as usize;
-        let len = self.end as usize - self.start as usize;
-        assert!(offset <= len, "Offset is beyond end of source");
-        if offset == len {
-            // Moving to end, so by definition on a UTF-8 character boundary
-            self.ptr = self.end;
-        } else {
-            // SAFETY: `start + offset` is < `end`, so `new_ptr` is in bounds of original `&str`
-            let new_ptr = unsafe { self.start.add(offset) };
-            // SAFETY: `new_ptr` is in bounds of original `&str`, and not at the end,
-            // so valid to read a byte
-            let byte = unsafe { new_ptr.read() };
-            // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary
-            assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
-            // Move current position. The checks above satisfy `Source`'s invariants.
-            self.ptr = new_ptr;
-        }
-    }
-
     /// Move current position back by `n` bytes.
     ///
     /// # Panic
