@@ -67,6 +67,12 @@ struct LexerCurrent {
     token: Token,
 }
 
+/// Lookahead record.
+struct Lookahead<'a> {
+    position: SourcePosition<'a>,
+    token: Token,
+}
+
 pub struct Lexer<'a> {
     allocator: &'a Allocator,
 
@@ -79,7 +85,7 @@ pub struct Lexer<'a> {
 
     pub(crate) errors: Vec<Error>,
 
-    lookahead: VecDeque<LexerCheckpoint<'a>>,
+    lookahead: VecDeque<Lookahead<'a>>,
 
     context: LexerContext,
 
@@ -161,11 +167,7 @@ impl<'a> Lexer<'a> {
         for _i in self.lookahead.len()..n {
             let kind = self.read_next_token();
             let peeked = self.finish_next(kind);
-            self.lookahead.push_back(LexerCheckpoint {
-                position: self.source.position(),
-                token: peeked,
-                errors_pos: self.errors.len(),
-            });
+            self.lookahead.push_back(Lookahead { position: self.source.position(), token: peeked });
         }
 
         self.current.token = token;
