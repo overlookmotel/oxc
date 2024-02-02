@@ -147,12 +147,11 @@ impl<'a> Lexer<'a> {
             return self.lookahead[n - 1].token;
         }
 
-        // TODO: Could just get `token` and `position` here
-        let checkpoint = self.checkpoint();
+        let token = self.current.token;
+        let position = self.source.position();
 
         if let Some(checkpoint) = self.lookahead.back() {
             self.source.set_position(checkpoint.position);
-            // TODO: What to do about `errors_pos`?
         }
 
         // Reset the current token for `read_next_token`
@@ -169,9 +168,8 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        self.current.token = checkpoint.token;
-        self.source.set_position(checkpoint.position);
-        // TODO: What to do about `errors_pos`?
+        self.current.token = token;
+        self.source.set_position(position);
 
         self.lookahead[n - 1].token
     }
@@ -185,8 +183,6 @@ impl<'a> Lexer<'a> {
     pub fn next_token(&mut self) -> Token {
         if let Some(checkpoint) = self.lookahead.pop_front() {
             self.source.set_position(checkpoint.position);
-            // TODO: What to do with `error_pos`?
-            // self.current.errors_pos = checkpoint.errors_pos;
             return checkpoint.token;
         }
         let kind = self.read_next_token();
