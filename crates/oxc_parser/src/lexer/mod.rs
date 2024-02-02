@@ -240,7 +240,6 @@ impl<'a> Lexer<'a> {
     /// Peek the next next char without advancing the position
     #[inline]
     fn peek2(&self) -> Option<char> {
-        // TODO: Possible to get rid of `.clone()` here?
         let mut source = self.source.clone();
         source.next_char();
         source.next_char()
