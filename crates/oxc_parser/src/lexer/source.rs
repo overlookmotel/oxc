@@ -260,6 +260,8 @@ impl<'a> Source<'a> {
     /// SAFETY: Caller must ensure `ptr < end` i.e. not at end of file.
     #[inline]
     pub(super) unsafe fn peek_byte_unchecked(&self) -> u8 {
+        // SAFETY: Caller guarantees `ptr` is before `end` (i.e. not at end of file).
+        // Mathods of this type provide no way to allow `ptr` to be before `start`.
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
         self.ptr.read()
     }
