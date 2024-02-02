@@ -4,11 +4,66 @@ use crate::MAX_LEN;
 
 use std::{marker::PhantomData, slice, str};
 
-// TODO: Add comment explaining purpose and invariants of `Source`
 // TODO: Try to speed up reverting to a checkpoint
 // TODO: Is `*self.ptr` better than `self.ptr.read()`?
 // TODO: Use `NonNull` for all the pointers?
 
+/// `Source` holds the source text for the lexer, and provides APIs to read it.
+///
+/// It provides a cursor which allows consuming source text either as `char`s, or as bytes.
+/// It replaces `std::str::Chars` iterator which performed the same function previously,
+/// but was less flexible as only allowed consuming source char by char.
+///
+/// Consuming source text byte-by-byte is often more performant than char-by-char.
+///
+/// Implementation of `Source::next_char` is copied directly from `std::str::Chars::next`.
+///
+/// `Source` provides:
+///
+/// * Safe API for consuming source char-by-char (`Source::next_char`, `Source::peek_char`).
+/// * Safe API for peeking next source byte (`Source::peek_byte`).
+/// * Unsafe API for consuming source byte-by-byte (`Source::next_byte`).
+/// * Mostly-safe API for rewinding to a previous position in source
+///   (`Source::position`, `Source::set_position`).
+///
+/// # Composition of `Source`
+///
+/// * `start` is pointer to start of source text.
+/// * `end` is pointer to end of source text.
+/// * `ptr` is cursor for current position in source text.
+///
+/// # Invariants of `Source`
+///
+/// 1. `start` <= `end`
+/// 2. The region of memory bounded between `start` and `end` must be initialized,
+///    a single allocation, and contain the bytes of a valid UTF-8 string.
+/// 3. `ptr` must always be >= `start` and <= `end`.
+///    i.e. cursor always within bounds of source text `&str`, or 1 byte after last byte
+///    of source text (positioned on EOF).
+/// 4. `ptr` must always point to a UTF-8 character boundary, or EOF.
+///    i.e. pointing to *1st* byte of a UTF-8 character.
+///
+/// These invariants are the same as `std::str::Chars`, except `Source` allows temporarily
+/// breaking invariant (4) to step through source text byte-by-byte.
+///
+/// Invariants (1), (2) and (3) must be upheld at all times.
+/// Invariant (4) can be temporarily broken, as long as caller ensures it's satisfied again.
+///
+/// Invariants (1) and (2) are enforced by initializing `start` and `end` from a valid `&str`,
+/// and they are never modified after initialization.
+///
+/// Safe methods of `Source` enforce invariant (3) i.e. they do not allow reading past EOF.
+/// Unsafe methods e.g. `Source::next_byte_unchecked` and `Source::peek_byte_unchecked`
+/// require caller to uphold this invariant.
+///
+/// Invariant (4) is the most difficult to satisfy.
+/// `Source::next_char` relies on source text being valid UTF-8 to provide a safe API which
+/// upholds this invariant.
+/// `Source::next_byte` requires very careful use as it may violate invariant (4).
+/// That is fine temporarily, but caller *must* ensure the safety conditions of `Source::next_byte`
+/// are satisfied, to restore this invariant before passing control back to other code.
+/// It will often be preferable to instead use `Source::peek_byte`, followed by `Source::next_char`,
+/// which are safe methods, and compiler will often reduce to equally efficient code.
 #[derive(Clone)]
 pub(super) struct Source<'a> {
     /// Pointer to start of source string. Never altered after initialization.
@@ -199,13 +254,34 @@ impl<'a> Source<'a> {
     /// Get next byte of source, if not at EOF.
     ///
     /// # SAFETY
-    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence.
+    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence,
+    /// which would violate one of `Source`'s invariants.
+    ///
+    /// This is OK temporarily, but caller *must* ensure the invariant is restored again.
+    ///
     /// Caller must ensure one of:
+    ///
     /// 1. No byte is returned (end of file).
     /// 2. The byte returned is ASCII.
     /// 3. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
-    ///    to consume the rest of the multi-byte UTF-8 character, before any other methods
-    ///    of `Source` are called.
+    ///    to consume the rest of the multi-byte UTF-8 character, before calling any other methods
+    ///    of `Source` (even safe methods) which rely on `Source` being positioned on a UTF-8
+    ///    character boundary, or before passing control back to other safe code which may call them.
+    ///
+    /// In particular, safe methods `Source::next_char`, `Source::peek_char`, and `Source::remaining`
+    /// are *not* safe to call until one of above conditions is satisfied.
+    ///
+    /// It will often be preferable to instead use `Source::peek_byte`, followed by `Source::next_char`,
+    /// which are safe methods, and compiler will often reduce to equally efficient code, if calling
+    /// code tests the byte returned. e.g.:
+    ///
+    /// ```
+    /// // Consume a space
+    /// let byte = source.peek_byte();
+    /// if byte == Some(b' ') {
+    ///   source.next_char().unwrap();
+    /// }
+    /// ```
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
         if self.ptr == self.end {
@@ -222,15 +298,25 @@ impl<'a> Source<'a> {
     /// # SAFETY
     /// Caller must ensure `Source` is not at end of file.
     ///
-    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence.
-    /// Caller must ensure either:
-    /// 1. The byte returned is ASCII.
-    /// 2. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
-    ///    to consume the rest of the multi-byte UTF-8 character, before any other methods
-    ///    of `Source` are called.
+    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence,
+    /// which would violate one of `Source`'s invariants.
+    ///
+    /// This is OK temporarily, but caller *must* ensure the invariant is restored again.
+    ///
+    /// Caller must ensure one of:
+    ///
+    /// 1. No byte is returned (end of file).
+    /// 2. The byte returned is ASCII.
+    /// 3. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
+    ///    to consume the rest of the multi-byte UTF-8 character, before calling any other methods
+    ///    of `Source` (even safe methods) which rely on `Source` being positioned on a UTF-8
+    ///    character boundary, or before passing control back to other safe code which may call them.
+    ///
+    /// In particular, safe methods `Source::next_char`, `Source::peek_char`, and `Source::remaining`
+    /// are *not* safe to call until one of above conditions is satisfied.
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
-        // SAFETY: Caller guarantees not at end of file.
+        // SAFETY: Caller guarantees not at end of file i.e. `self.ptr != self.end`.
         // Methods of this type provide no way for `self.ptr` to be before `self.start`
         // or after `self.end`. Therefore always valid to read a byte from `self.ptr`,
         // and incrementing `self.ptr` cannot result in `self.ptr > self.end`.
