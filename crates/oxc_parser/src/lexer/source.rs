@@ -6,7 +6,6 @@ use std::{marker::PhantomData, slice, str};
 
 // TODO: Add comment explaining purpose and invariants of `Source`
 // TODO: Try to speed up reverting to a checkpoint
-// TODO: Use `peek_byte_unchecked` for all pointer reads (for the `debug_assert!()`)
 // TODO: Is `*self.ptr` better than `self.ptr.read()`?
 // TODO: Use `NonNull` for all the pointers?
 
@@ -231,8 +230,11 @@ impl<'a> Source<'a> {
     ///    of `Source` are called.
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
-        debug_assert!(self.ptr >= self.start && self.ptr < self.end);
-        let byte = self.ptr.read();
+        // SAFETY: Caller guarantees not at end of file.
+        // Methods of this type provide no way for `self.ptr` to be before `self.start`
+        // or after `self.end`. Therefore always valid to read a byte from `self.ptr`,
+        // and incrementing `self.ptr` cannot result in `self.ptr > self.end`.
+        let byte = self.peek_byte_unchecked();
         self.ptr = self.ptr.add(1);
         byte
     }
