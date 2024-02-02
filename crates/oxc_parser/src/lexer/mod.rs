@@ -158,10 +158,9 @@ impl<'a> Lexer<'a> {
         // TODO: Is this still required?
         self.current.token = Token::default();
 
-        let mut peeked = Token::default();
         for _i in self.lookahead.len()..n {
             let kind = self.read_next_token();
-            peeked = self.finish_next(kind);
+            let peeked = self.finish_next(kind);
             self.lookahead.push_back(LexerCheckpoint {
                 position: self.source.position(),
                 token: peeked,
@@ -172,7 +171,7 @@ impl<'a> Lexer<'a> {
         self.current.token = token;
         self.source.set_position(position);
 
-        peeked
+        self.lookahead[n - 1].token
     }
 
     /// Set context
