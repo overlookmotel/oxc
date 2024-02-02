@@ -200,11 +200,14 @@ impl<'a> Source<'a> {
 
     /// Get next byte of source, if not at EOF.
     ///
-    /// SAFETY:
-    /// This function may leave `self.ptr` in middle of a UTF-8 character sequence.
-    /// It is caller's responsibility to ensure that either the byte returned is ASCII,
-    /// or make further calls to `next_byte()` or `next_byte_unchecked()` until `self.ptr`
-    /// is positioned on a UTF-8 character boundary.
+    /// # SAFETY
+    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence.
+    /// Caller must ensure one of:
+    /// 1. No byte is returned (end of file).
+    /// 2. The byte returned is ASCII.
+    /// 3. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
+    ///    to consume the rest of the multi-byte UTF-8 character, before any other methods
+    ///    of `Source` are called.
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
         if self.ptr == self.end {
@@ -218,12 +221,15 @@ impl<'a> Source<'a> {
 
     /// Get next byte of source, without bounds-check.
     ///
-    /// SAFETY:
-    /// 1. Caller must ensure `ptr < end` i.e. not at end of file.
-    /// 2. This function may leave `self.ptr` in middle of a UTF-8 character sequence.
-    ///    It is caller's responsibility to ensure that either the byte returned is ASCII,
-    ///    or make further calls to `next_byte()` or `next_byte_unchecked()` until the end of
-    ///    the UTF-8 character sequence is reached.
+    /// # SAFETY
+    /// Caller must ensure `Source` is not at end of file.
+    ///
+    /// This function may leave `Source` positioned in middle of a UTF-8 character sequence.
+    /// Caller must ensure either:
+    /// 1. The byte returned is ASCII.
+    /// 2. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
+    ///    to consume the rest of the multi-byte UTF-8 character, before any other methods
+    ///    of `Source` are called.
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
