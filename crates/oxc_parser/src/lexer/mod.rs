@@ -39,6 +39,14 @@ pub use self::{
 use crate::{diagnostics, MAX_LEN};
 
 #[derive(Debug, Clone)]
+pub struct LexerCurrent<'a> {
+    /// Remaining chars to be tokenized
+    chars: Chars<'a>,
+
+    token: Token,
+}
+
+#[derive(Debug, Clone)]
 pub struct LexerCheckpoint<'a> {
     /// Remaining chars to be tokenized
     chars: Chars<'a>,
@@ -62,7 +70,7 @@ pub struct Lexer<'a> {
 
     source_type: SourceType,
 
-    current: LexerCheckpoint<'a>,
+    current: LexerCurrent<'a>,
 
     pub(crate) errors: Vec<Error>,
 
@@ -91,7 +99,7 @@ impl<'a> Lexer<'a> {
 
         // The first token is at the start of file, so is allows on a new line
         let token = Token::new_on_new_line();
-        let current = LexerCheckpoint { chars: source.chars(), token, errors_pos: 0 };
+        let current = LexerCurrent { chars: source.chars(), token };
         Self {
             allocator,
             source,
@@ -124,7 +132,8 @@ impl<'a> Lexer<'a> {
     /// Rewinds the lexer to the same state as when the passed in `checkpoint` was created.
     pub fn rewind(&mut self, checkpoint: LexerCheckpoint<'a>) {
         self.errors.truncate(checkpoint.errors_pos);
-        self.current = checkpoint;
+        self.current.chars = checkpoint.chars;
+        self.current.token = checkpoint.token;
         self.lookahead.clear();
     }
 
@@ -137,15 +146,14 @@ impl<'a> Lexer<'a> {
             return self.lookahead[n - 1].token;
         }
 
-        let checkpoint = self.checkpoint();
+        let current = self.current.clone();
 
         if let Some(checkpoint) = self.lookahead.back() {
-            self.current = checkpoint.clone();
+            self.current.chars = checkpoint.chars.clone();
         }
 
-        // reset the current token for `read_next_token`,
-        // otherwise it will contain the token from
-        // `self.current = checkpoint`
+        // Reset the current token for `read_next_token`
+        // TODO: Is this still needed?
         self.current.token = Token::default();
 
         for _i in self.lookahead.len()..n {
@@ -158,7 +166,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        self.current = checkpoint;
+        self.current = current;
 
         self.lookahead[n - 1].token
     }
@@ -172,7 +180,6 @@ impl<'a> Lexer<'a> {
     pub fn next_token(&mut self) -> Token {
         if let Some(checkpoint) = self.lookahead.pop_front() {
             self.current.chars = checkpoint.chars;
-            self.current.errors_pos = checkpoint.errors_pos;
             return checkpoint.token;
         }
         let kind = self.read_next_token();
