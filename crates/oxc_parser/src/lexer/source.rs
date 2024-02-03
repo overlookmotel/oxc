@@ -146,7 +146,7 @@ impl<'a> Source<'a> {
         debug_assert!(
             pos.ptr >= self.start
                 && pos.ptr <= self.end
-                && (pos.ptr == self.end || !is_utf8_cont_byte(read_ptr(pos.ptr)))
+                && (pos.ptr == self.end || !is_utf8_cont_byte(read_u8(pos.ptr)))
         );
         self.ptr = pos.ptr;
     }
@@ -181,7 +181,7 @@ impl<'a> Source<'a> {
         // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary.
         // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
         // not at the end, so valid to read a byte.
-        let byte = unsafe { read_ptr(new_ptr) };
+        let byte = unsafe { read_u8(new_ptr) };
         assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
         // Move current position. The checks above satisfy `Source`'s invariants.
@@ -350,7 +350,7 @@ impl<'a> Source<'a> {
         // SAFETY: Caller guarantees `ptr` is before `end` (i.e. not at end of file).
         // Methods of this type provide no way to allow `ptr` to be before `start`.
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
-        read_ptr(self.ptr)
+        read_u8(self.ptr)
     }
 }
 
@@ -381,7 +381,7 @@ const fn is_utf8_cont_byte(byte: u8) -> bool {
 /// # SAFETY
 /// Caller must ensure pointer is non-null and valid for read of a `u8`.
 #[inline]
-unsafe fn read_ptr(ptr: *const u8) -> u8 {
+unsafe fn read_u8(ptr: *const u8) -> u8 {
     // SAFETY: Caller guarantees pointer is non-null and valid for read of a `u8`.
     // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
     // TODO: More safety comments
