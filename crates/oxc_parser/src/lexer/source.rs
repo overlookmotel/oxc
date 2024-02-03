@@ -225,7 +225,7 @@ impl<'a> Source<'a> {
         Some(self.next_code_point_unicode(x))
     }
 
-    // TODO: Mark this branch `#[cold]`?
+    #[cold]
     fn next_code_point_unicode(&mut self, x: u8) -> u32 {
         debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
 
