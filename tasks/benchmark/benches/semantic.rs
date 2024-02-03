@@ -12,19 +12,16 @@ fn bench_semantic(criterion: &mut Criterion) {
         let source_type = SourceType::from_path(&file.file_name).unwrap();
         group.bench_with_input(
             BenchmarkId::from_parameter(&file.file_name),
-            &(&file.source_text, &file.file_name),
-            |b, (source_text, file_name)| {
+            &file.source_text,
+            |b, source_text| {
                 let allocator = Allocator::default();
                 let ret = Parser::new(&allocator, source_text, source_type).parse();
                 let program = allocator.alloc(ret.program);
-                let mut count: usize = 0;
                 b.iter_with_large_drop(|| {
-                    count += 1;
                     SemanticBuilder::new(source_text, source_type)
                         .build_module_record(PathBuf::new(), program)
                         .build(program)
                 });
-                eprintln!("Iterations for {file_name}: {count}");
             },
         );
     }
