@@ -159,8 +159,9 @@ impl<'a> Lexer<'a> {
         let position = self.source.position();
 
         if let Some(checkpoint) = self.lookahead.back() {
-            // SAFETY: `self.lookahead` only contains checkpoints created from `self.source`
-            // so `checkpoint.position` was created from `self.source` too.
+            // SAFETY: `self.lookahead` only contains checkpoints created by this `Lexer`.
+            // `self.source` never changes, so `checkpoint.position` must have been created
+            // from `self.source`.
             unsafe { self.source.set_position(checkpoint.position) };
         }
 
@@ -183,7 +184,7 @@ impl<'a> Lexer<'a> {
         }
 
         self.current.token = token;
-        // SAFETY: `position` was created from `self.source`. `self.source` has not changed.
+        // SAFETY: `position` was created above from `self.source`. `self.source` never changes.
         unsafe { self.source.set_position(position) };
 
         self.lookahead[n - 1].token
