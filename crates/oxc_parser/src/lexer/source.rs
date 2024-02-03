@@ -380,9 +380,11 @@ const fn is_utf8_cont_byte(byte: u8) -> bool {
 ///
 /// Could just use `ptr.read()` for this use case, but safer to follow Rust's authors,
 /// in case there's a subtlety I (@overlookmotel) don't understand.
+/// This is also improves Lexer benchmarks by approx 7%, compared to `ptr.read()`.
 ///
 /// # SAFETY
 /// Caller must ensure pointer is non-null and valid for read of a `u8`.
+// TODO: Try `*ptr` instead
 #[inline]
 unsafe fn read_ptr(ptr: *const u8) -> u8 {
     // SAFETY: Caller guarantees pointer is non-null and valid for read of a `u8`.
