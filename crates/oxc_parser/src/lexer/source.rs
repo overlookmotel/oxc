@@ -171,11 +171,8 @@ impl<'a> Source<'a> {
         assert!(n > 0, "Cannot call `Source::back` with 0");
 
         // Ensure not attempting to go back to before start of source
-        let bytes_consumed = self.ptr as usize - self.start as usize;
-        assert!(
-            n <= bytes_consumed,
-            "Cannot go back {n} bytes - only {bytes_consumed} bytes consumed"
-        );
+        let offset = self.ptr as usize - self.start as usize;
+        assert!(n <= offset, "Cannot go back {n} bytes - only {offset} bytes consumed");
 
         // SAFETY: We have checked that `n` is less than distance between `start` and `ptr`,
         // so `new_ptr` cannot be outside of allocation of original `&str`
