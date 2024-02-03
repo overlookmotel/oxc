@@ -69,6 +69,12 @@ struct LexerCurrent {
     token: Token,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Lookahead<'a> {
+    position: SourcePosition<'a>,
+    token: Token,
+}
+
 pub struct Lexer<'a> {
     allocator: &'a Allocator,
 
@@ -81,7 +87,7 @@ pub struct Lexer<'a> {
 
     pub(crate) errors: Vec<Error>,
 
-    lookahead: VecDeque<LexerCheckpoint<'a>>,
+    lookahead: VecDeque<Lookahead<'a>>,
 
     context: LexerContext,
 
@@ -167,15 +173,7 @@ impl<'a> Lexer<'a> {
         for _i in self.lookahead.len()..n {
             let kind = self.read_next_token();
             let peeked = self.finish_next(kind);
-            self.lookahead.push_back(LexerCheckpoint {
-                position: self.source.position(),
-                token: peeked,
-                // `errors_pos` is never read from lookahead checkpoints, so no need to put correct
-                // value here. Bizarrely, substituting a different struct for lookaheads without the
-                // useless `errors_pos` field causes a regression on `semantic`'s benchmarks.
-                // So we leave the field present, but fill it with a dummy value.
-                errors_pos: 0,
-            });
+            self.lookahead.push_back(Lookahead { position: self.source.position(), token: peeked });
         }
 
         // Call to `finish_next` in loop above leaves `self.current.token = Token::default()`.
