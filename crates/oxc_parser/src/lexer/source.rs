@@ -334,6 +334,14 @@ impl<'a> Source<'a> {
         self.clone().next_char()
     }
 
+    /// Peek next next char of source, without consuming it.
+    #[inline]
+    pub(super) fn peek_char2(&self) -> Option<char> {
+        let mut clone = self.clone();
+        clone.next_char();
+        clone.next_char()
+    }
+
     /// Peek next byte of source without consuming it.
     #[inline]
     pub(super) fn peek_byte(&self) -> Option<u8> {

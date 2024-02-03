@@ -238,9 +238,7 @@ impl<'a> Lexer<'a> {
     /// Peek the next next char without advancing the position
     #[inline]
     fn peek2(&self) -> Option<char> {
-        let mut source = self.source.clone();
-        source.next_char();
-        source.next_char()
+        self.source.peek_char2()
     }
 
     /// Peek the next character, and advance the current position if it matches
