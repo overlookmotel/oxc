@@ -288,8 +288,12 @@ impl<'a> Source<'a> {
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
         if self.ptr == self.end {
-            // TODO: Mark this branch `#[cold]`?
-            None
+            // EOF only comes rarely! Hint to branch predictor that this branch won't be taken.
+            #[cold]
+            fn eof() -> Option<u8> {
+                None
+            }
+            eof()
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
             Some(self.next_byte_unchecked())
@@ -345,8 +349,12 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn peek_byte(&self) -> Option<u8> {
         if self.ptr == self.end {
-            // TODO: Mark this branch `#[cold]`?
-            None
+            // EOF only comes rarely! Hint to branch predictor that this branch won't be taken.
+            #[cold]
+            fn eof() -> Option<u8> {
+                None
+            }
+            eof()
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
             Some(unsafe { self.peek_byte_unchecked() })
