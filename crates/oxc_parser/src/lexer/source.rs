@@ -94,9 +94,7 @@ impl<'a> Source<'a> {
         // SAFETY: `start` and `end` are created from a `&str` in `Source::new`,
         // so guaranteed to be start and end of a valid UTF-8 string
         unsafe {
-            // SAFETY: TODO
-            #[allow(clippy::cast_sign_loss)]
-            let len = self.end.offset_from(self.start) as usize;
+            let len = self.end as usize - self.start as usize;
             let slice = slice::from_raw_parts(self.start, len);
             str::from_utf8_unchecked(slice)
         }
@@ -112,9 +110,7 @@ impl<'a> Source<'a> {
         // Invariant of `Source` is that `ptr` is always on a UTF-8 character boundary,
         // so slice from `ptr` to `end` will always be a valid UTF-8 string.
         unsafe {
-            // SAFETY: TODO
-            #[allow(clippy::cast_sign_loss)]
-            let len = self.end.offset_from(self.ptr) as usize;
+            let len = self.end as usize - self.ptr as usize;
             let slice = slice::from_raw_parts(self.ptr, len);
             debug_assert!(slice.is_empty() || !is_utf8_cont_byte(slice[0]));
             str::from_utf8_unchecked(slice)
@@ -156,12 +152,11 @@ impl<'a> Source<'a> {
     }
 
     /// Get current position in source, relative to start of source.
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub(super) fn offset(&self) -> u32 {
         // Cannot overflow `u32` because of `MAX_LEN` check in `Source::new`
-        // SAFETY: TODO
-        (unsafe { self.ptr.offset_from(self.start) } as u32)
+        (self.ptr as usize - self.start as usize) as u32
     }
 
     /// Move current position back by `n` bytes.
@@ -175,10 +170,8 @@ impl<'a> Source<'a> {
     pub(super) fn back(&mut self, n: usize) {
         assert!(n > 0, "Cannot call `Source::back` with 0");
 
-        #[allow(clippy::cast_sign_loss)]
         // Ensure not attempting to go back to before start of source
-        // SAFETY: TODO
-        let offset = unsafe { self.ptr.offset_from(self.start) } as usize;
+        let offset = self.ptr as usize - self.start as usize;
         assert!(n <= offset, "Cannot go back {n} bytes - only {offset} bytes consumed");
 
         // SAFETY: We have checked that `n` is less than distance between `start` and `ptr`,
