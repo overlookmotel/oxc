@@ -250,7 +250,7 @@ impl<'a> Source<'a> {
     #[allow(dead_code)]
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
-        if self.ptr == self.end {
+        if self.is_eof() {
             None
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
@@ -317,8 +317,7 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn peek_char2(&self) -> Option<char> {
         // Handle EOF
-        // TODO: Replace all these EOF checks with `self.is_eof()`
-        if self.ptr == self.end {
+        if self.is_eof() {
             return None;
         }
 
@@ -334,7 +333,7 @@ impl<'a> Source<'a> {
     /// Peek next byte of source without consuming it.
     #[inline]
     pub(super) fn peek_byte(&self) -> Option<u8> {
-        if self.ptr == self.end {
+        if self.is_eof() {
             None
         } else {
             // SAFETY: Safe to read from `ptr` as we just checked it's not out of bounds
