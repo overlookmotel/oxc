@@ -146,7 +146,7 @@ impl<'a> Source<'a> {
         debug_assert!(
             pos.ptr >= self.start
                 && pos.ptr <= self.end
-                && (pos.ptr == self.end || !is_utf8_cont_byte(*pos.ptr))
+                && (pos.ptr == self.end || !is_utf8_cont_byte(read_ptr(pos.ptr)))
         );
         self.ptr = pos.ptr;
     }
@@ -181,7 +181,7 @@ impl<'a> Source<'a> {
         // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary.
         // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
         // not at the end, so valid to read a byte.
-        let byte = unsafe { *new_ptr };
+        let byte = unsafe { read_ptr(new_ptr) };
         assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
         // Move current position. The checks above satisfy `Source`'s invariants.
@@ -351,7 +351,7 @@ impl<'a> Source<'a> {
         // SAFETY: Caller guarantees `ptr` is before `end` (i.e. not at end of file).
         // Methods of this type provide no way to allow `ptr` to be before `start`.
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
-        *self.ptr
+        read_ptr(self.ptr)
     }
 }
 
@@ -367,4 +367,25 @@ pub struct SourcePosition<'a> {
 const fn is_utf8_cont_byte(byte: u8) -> bool {
     // 0x80 - 0xBF are continuation bytes i.e. not 1st byte of a UTF-8 character sequence
     byte >= 0x80 && byte < 0xC0
+}
+
+/// Read `u8` from `*const u8` pointer.
+///
+/// Adapted from `core::slice::iter::next`.
+/// https://doc.rust-lang.org/src/core/slice/iter.rs.html#132
+/// https://doc.rust-lang.org/src/core/slice/iter/macros.rs.html#156-168
+///
+/// Could just use `ptr.read()` for this use case, but safer to follow Rust's authors,
+/// in case there's a subtlety I (@overlookmotel) don't understand.
+/// This is also improves Lexer benchmarks by approx 7%, compared to `ptr.read()`.
+///
+/// # SAFETY
+/// Caller must ensure pointer is non-null and valid for read of a `u8`.
+// TODO: Try `*ptr` instead
+#[inline]
+unsafe fn read_ptr(ptr: *const u8) -> u8 {
+    // SAFETY: Caller guarantees pointer is non-null and valid for read of a `u8`.
+    // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
+    debug_assert!(!ptr.is_null());
+    *ptr.as_ref().unwrap_unchecked()
 }
