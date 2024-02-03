@@ -192,7 +192,7 @@ impl<'a> Source<'a> {
         self.ptr = new_ptr;
     }
 
-    /// Consume next char of source.
+    /// Get next char of source, and advance position to after it.
     #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
         self.next_code_point().map(|ch| {
@@ -254,7 +254,7 @@ impl<'a> Source<'a> {
         Some(ch)
     }
 
-    /// Consume next byte of source.
+    /// Get next byte of source, and advance position to after it.
     ///
     /// # SAFETY
     /// This function may leave `Source` positioned in middle of a UTF-8 character sequence,
@@ -296,7 +296,7 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// Consume next byte of source, without bounds-check.
+    /// Get next bytes of source, and advance position to after it, without bounds-check.
     ///
     /// # SAFETY
     /// Caller must ensure `Source` is not at end of file.
