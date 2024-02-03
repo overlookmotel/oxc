@@ -4,10 +4,7 @@ use crate::MAX_LEN;
 
 use std::{marker::PhantomData, slice, str};
 
-// TODO: Try to speed up reverting to a checkpoint
 // TODO: Is `*self.ptr` better than `self.ptr.read()`?
-// TODO: Investigate why semantic benchmarks dropped on "Reduce size of Lookahead struct" commit.
-// Is there a bug?
 
 /// `Source` holds the source text for the lexer, and provides APIs to read it.
 ///
