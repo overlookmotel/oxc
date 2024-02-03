@@ -14,12 +14,11 @@ fn bench_semantic(criterion: &mut Criterion) {
             BenchmarkId::from_parameter(&file.file_name),
             &file.source_text,
             |b, source_text| {
-                let source_text2 = source_text.clone();
                 let allocator = Allocator::default();
                 let ret = Parser::new(&allocator, source_text, source_type).parse();
                 let program = allocator.alloc(ret.program);
                 b.iter_with_large_drop(|| {
-                    SemanticBuilder::new(&source_text2, source_type)
+                    SemanticBuilder::new(source_text, source_type)
                         .build_module_record(PathBuf::new(), program)
                         .build(program)
                 });
