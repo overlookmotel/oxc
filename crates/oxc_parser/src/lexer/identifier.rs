@@ -63,7 +63,7 @@ impl<'a> Lexer<'a> {
             // benchmarks.
             // The compiler unrolls this loop.
             for _i in 0..SEARCH_BATCH_SIZE {
-                next_byte = curr.read();
+                next_byte = *curr;
                 if !is_identifier_part_ascii_byte(next_byte) {
                     break 'outer;
                 }
@@ -118,7 +118,7 @@ impl<'a> Lexer<'a> {
                 return id_without_first;
             }
 
-            next_byte = curr.read();
+            next_byte = *curr;
             if !is_identifier_part_ascii_byte(next_byte) {
                 break;
             }
