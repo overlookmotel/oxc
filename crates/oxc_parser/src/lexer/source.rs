@@ -14,8 +14,6 @@ use std::{marker::PhantomData, slice, str};
 ///
 /// Consuming source text byte-by-byte is often more performant than char-by-char.
 ///
-/// Implementation of `Source::next_char` is copied directly from `std::str::Chars::next`.
-///
 /// `Source` provides:
 ///
 /// * Safe API for consuming source char-by-char (`Source::next_char`, `Source::peek_char`).
@@ -198,60 +196,16 @@ impl<'a> Source<'a> {
     /// Get next char of source, and advance position to after it.
     #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
-        self.next_code_point().map(|ch| {
-            debug_assert!(char::try_from(ch).is_ok());
-            // SAFETY:
-            // `Source` is created from a `&str`, so between `start` and `end` must be valid UTF-8.
-            // Invariant of `Source` is that `ptr` must always be positioned on a UTF-8 character boundary.
-            // Therefore `ch` must be a valid Unicode Scalar Value.
-            unsafe { char::from_u32_unchecked(ch) }
-        })
-    }
-
-    /// Get next code point.
-    /// Copied from implementation of `std::str::Chars`.
-    /// https://doc.rust-lang.org/src/core/str/validations.rs.html#36
-    #[inline]
-    fn next_code_point(&mut self) -> Option<u32> {
-        // Decode UTF-8.
-        // SAFETY: If next byte is not ASCII, this function consumes further bytes until end of UTF-8
-        // character sequence, leaving `ptr` positioned on next UTF-8 character boundary, or at EOF.
-        let x = unsafe { self.next_byte() }?;
-        #[allow(clippy::cast_lossless)]
-        if x < 128 {
-            return Some(x as u32);
-        }
-
-        debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
-
-        // Multibyte case follows
-        // Decode from a byte combination out of: [[[x y] z] w]
-        // NOTE: Performance is sensitive to the exact formulation here
-        let init = utf8_first_byte(x, 2);
-        // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte is not ASCII,
-        // so guaranteed there is a further byte to be consumed.
-        let y = unsafe { self.next_byte_unchecked() };
-        let mut ch = utf8_acc_cont_byte(init, y);
-        if x >= 0xE0 {
-            // [[x y z] w] case
-            // 5th bit in 0xE0 .. 0xEF is always clear, so `init` is still valid
-            // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte indicates it is start
-            // of a 3 or 4-byte sequence, so guaranteed there is a further byte to be consumed.
-            let z = unsafe { self.next_byte_unchecked() };
-            #[allow(clippy::cast_lossless)]
-            let y_z = utf8_acc_cont_byte((y & CONT_MASK) as u32, z);
-            ch = init << 12 | y_z;
-            if x >= 0xF0 {
-                // [x y z w] case
-                // use only the lower 3 bits of `init`
-                // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte indicates it is start
-                // of a 4-byte sequence, so guaranteed there is a further byte to be consumed.
-                let w = unsafe { self.next_byte_unchecked() };
-                ch = (init & 7) << 18 | utf8_acc_cont_byte(y_z, w);
-            }
-        }
-
-        Some(ch)
+        // Create a `Chars` iterator, get next char, and then update `self.ptr`
+        // to match `Chars` iterator's pointer afterwards
+        let mut chars = self.remaining().chars();
+        // TODO: Only update pointer if `chars.next().is_some()`?
+        // Presumably it gets inlined, and there's a branch on that condition anyway.
+        // TODO: Maybe handle ASCII with `peek_byte()` and `next_byte()`?
+        // TODO: Add `debug_assert!` that next byte is not UTF-8 continuation byte.
+        let maybe_char = chars.next();
+        self.ptr = chars.as_str().as_ptr();
+        maybe_char
     }
 
     /// Get next byte of source, and advance position to after it.
@@ -285,6 +239,7 @@ impl<'a> Source<'a> {
     ///   source.next_char().unwrap();
     /// }
     /// ```
+    #[allow(dead_code)]
     #[inline]
     unsafe fn next_byte(&mut self) -> Option<u8> {
         if self.ptr == self.end {
@@ -315,6 +270,7 @@ impl<'a> Source<'a> {
     ///
     /// In particular, safe methods `Source::next_char`, `Source::peek_char`, and `Source::remaining`
     /// are *not* safe to call until one of above conditions is satisfied.
+    #[allow(dead_code)]
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
         // SAFETY: Caller guarantees not at end of file i.e. `ptr != end`.
@@ -329,15 +285,17 @@ impl<'a> Source<'a> {
     /// Peek next char of source, without consuming it.
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
-        self.clone().next_char()
+        // TODO: Add `debug_assert!` that next byte is not UTF-8 continuation byte
+        self.remaining().chars().next()
     }
 
     /// Peek next next char of source, without consuming it.
     #[inline]
     pub(super) fn peek_char2(&self) -> Option<char> {
-        let mut clone = self.clone();
-        clone.next_char();
-        clone.next_char()
+        let mut chars = self.remaining().chars();
+        // TODO: Put `?` after 1st `chars.next()` to exit early if at EOF?
+        chars.next();
+        chars.next()
     }
 
     /// Peek next byte of source without consuming it.
@@ -371,39 +329,9 @@ pub struct SourcePosition<'a> {
     _marker: PhantomData<&'a str>,
 }
 
-/// Mask of the value bits of a continuation byte.
-/// Copied from implementation of `std::str::Chars`.
-/// https://doc.rust-lang.org/src/core/str/validations.rs.html#274
-const CONT_MASK: u8 = 0b0011_1111;
-
-/// Returns the initial codepoint accumulator for the first byte.
-/// The first byte is special, only want bottom 5 bits for width 2, 4 bits
-/// for width 3, and 3 bits for width 4.
-/// Copied from implementation of `std::str::Chars`.
-/// https://doc.rust-lang.org/src/core/str/validations.rs.html#11
-#[inline]
-const fn utf8_first_byte(byte: u8, width: u32) -> u32 {
-    (byte & (0x7F >> width)) as u32
-}
-
-/// Returns the value of `ch` updated with continuation byte `byte`.
-/// Copied from implementation of `std::str::Chars`.
-/// https://doc.rust-lang.org/src/core/str/validations.rs.html#17
-#[inline]
-const fn utf8_acc_cont_byte(ch: u32, byte: u8) -> u32 {
-    (ch << 6) | (byte & CONT_MASK) as u32
-}
-
 /// Return if byte is a UTF-8 continuation byte.
 #[inline]
 const fn is_utf8_cont_byte(byte: u8) -> bool {
     // 0x80 - 0xBF are continuation bytes i.e. not 1st byte of a UTF-8 character sequence
     byte >= 0x80 && byte < 0xC0
-}
-
-/// Return if byte is a valid UTF-8 byte.
-#[inline]
-const fn is_utf8_valid_byte(byte: u8) -> bool {
-    // All values are valid except 0xF8 - 0xFF
-    byte < 0xF8
 }
