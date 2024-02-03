@@ -60,14 +60,22 @@ use std::{marker::PhantomData, slice, str};
 /// are satisfied, to restore this invariant before passing control back to other code.
 /// It will often be preferable to instead use `Source::peek_byte`, followed by `Source::next_char`,
 /// which are safe methods, and compiler will often reduce to equally efficient code.
+///
+/// # Implementation detail: Field order
+///
+/// Field order has `ptr` before `end` to mirror `Chars` iterator's layout.
+/// This may improve compiler's ability to translate between `Source` and `Chars`
+/// (which is required in `Source::next_char`) without moves.
+/// `#[repr(C)]` to ensure compiler does not change the field order.
 #[derive(Clone)]
+#[repr(C)]
 pub(super) struct Source<'a> {
-    /// Pointer to start of source string. Never altered after initialization.
-    start: *const u8,
-    /// Pointer to end of source string. Never altered after initialization.
-    end: *const u8,
     /// Pointer to current position in source string
     ptr: *const u8,
+    /// Pointer to end of source string. Never altered after initialization.
+    end: *const u8,
+    /// Pointer to start of source string. Never altered after initialization.
+    start: *const u8,
     /// Marker for immutable borrow of source string
     _marker: PhantomData<&'a str>,
 }
