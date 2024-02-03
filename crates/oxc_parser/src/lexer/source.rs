@@ -211,7 +211,7 @@ impl<'a> Source<'a> {
         debug_assert!(!is_utf8_cont_byte(byte));
 
         // Create a `Chars` iterator, get next char from it, and then update `self.ptr`
-        // to match `Chars` iterator's pointer afterwards.
+        // to match `Chars` iterator's updated pointer afterwards.
         // `Chars` iterator upholds same invariants as `Source`, so its pointer is guaranteed
         // to be valid as `self.ptr`.
         let mut chars = self.remaining().chars();
