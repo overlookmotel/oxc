@@ -174,8 +174,11 @@ impl<'a> Lexer<'a> {
             self.lookahead.push_back(LexerCheckpoint {
                 position: self.source.position(),
                 token: peeked,
-                // TODO: Change this to 0
-                errors_pos: self.errors.len(),
+                // `errors_pos` is never read from lookahead checkpoints, so no need to put correct
+                // value here. Bizarrely, substituting a different struct for lookaheads without the
+                // useless `errors_pos` field causes a regression on `semantic`'s benchmarks.
+                // So we leave the field present, but fill it with a dummy value.
+                errors_pos: 0,
             });
         }
 
