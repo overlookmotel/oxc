@@ -140,15 +140,21 @@ impl<'a> Source<'a> {
     }
 
     /// Move current position.
-    // TODO: Should this be unsafe? It's possible to create a `SourcePosition` from a *different*
-    // `Source`, which would violate `Source`'s invariants.
+    ///
+    /// # SAFETY
+    /// `pos` must be created from this `Source`, not another `Source`.
+    /// If this is the case, the invariants of `Source` are guaranteed to be upheld.
+    //
+    // TODO: This function being unsafe is a pain, and a bit ridiculous. Find another way!
     #[inline]
-    pub(super) fn set_position(&mut self, pos: SourcePosition) {
-        // `SourcePosition` always upholds the invariants of `Source`
-        debug_assert!(pos.ptr >= self.start && pos.ptr <= self.end);
-        // SAFETY: We just checked `pos.ptr` is within bounds of source `&str`,
-        // so safe to read from if not at end
-        debug_assert!(pos.ptr == self.end || !is_utf8_cont_byte(unsafe { pos.ptr.read() }));
+    pub(super) unsafe fn set_position(&mut self, pos: SourcePosition) {
+        // `SourcePosition` always upholds the invariants of `Source`,
+        // as long as it's created from this `Source`
+        debug_assert!(
+            pos.ptr >= self.start
+                && pos.ptr <= self.end
+                && (pos.ptr == self.end || !is_utf8_cont_byte(pos.ptr.read()))
+        );
         self.ptr = pos.ptr;
     }
 

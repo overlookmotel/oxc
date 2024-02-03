@@ -1,3 +1,5 @@
+#![allow(clippy::unnecessary_safety_comment)]
+
 //! An Ecma-262 Lexer / Tokenizer
 //! Prior Arts:
 //!     * [jsparagus](https://github.com/mozilla-spidermonkey/jsparagus/blob/master/crates/parser/src)
@@ -131,8 +133,14 @@ impl<'a> Lexer<'a> {
     }
 
     /// Rewinds the lexer to the same state as when the passed in `checkpoint` was created.
-    pub fn rewind(&mut self, checkpoint: LexerCheckpoint<'a>) {
+    ///
+    /// # SAFETY
+    /// `checkpoint` must have been created from this `Lexer`.
+    #[allow(clippy::missing_safety_doc)] // Clippy is wrong!
+    pub unsafe fn rewind(&mut self, checkpoint: LexerCheckpoint<'a>) {
         self.errors.truncate(checkpoint.errors_pos);
+        // SAFETY: Caller guarantees `checkpoint` was created from this `Lexer`,
+        // and therefore `checkpoint.position` was created from `self.source`.
         self.source.set_position(checkpoint.position);
         self.current.token = checkpoint.token;
         self.lookahead.clear();
@@ -151,7 +159,9 @@ impl<'a> Lexer<'a> {
         let position = self.source.position();
 
         if let Some(checkpoint) = self.lookahead.back() {
-            self.source.set_position(checkpoint.position);
+            // SAFETY: `self.lookahead` only contains checkpoints created from `self.source`
+            // so `checkpoint.position` was created from `self.source` too.
+            unsafe { self.source.set_position(checkpoint.position) };
         }
 
         // Reset the current token for `read_next_token`
@@ -170,7 +180,8 @@ impl<'a> Lexer<'a> {
         }
 
         self.current.token = token;
-        self.source.set_position(position);
+        // SAFETY: `position` was created from `self.source`. `self.source` has not changed.
+        unsafe { self.source.set_position(position) };
 
         self.lookahead[n - 1].token
     }
@@ -183,7 +194,9 @@ impl<'a> Lexer<'a> {
     /// Main entry point
     pub fn next_token(&mut self) -> Token {
         if let Some(checkpoint) = self.lookahead.pop_front() {
-            self.source.set_position(checkpoint.position);
+            // SAFETY: `self.lookahead` only contains checkpoints created from `self.source`
+            // so `checkpoint.position` was created from `self.source` too.
+            unsafe { self.source.set_position(checkpoint.position) };
             return checkpoint.token;
         }
         let kind = self.read_next_token();
