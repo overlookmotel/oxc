@@ -208,7 +208,6 @@ impl<'a> Source<'a> {
     /// Get next code point.
     /// Copied from implementation of `std::str::Chars`.
     /// https://doc.rust-lang.org/src/core/str/validations.rs.html#36
-    /// Only difference is that code to handle unicode is split into a separate function here.
     #[inline]
     fn next_code_point(&mut self) -> Option<u32> {
         // Decode UTF-8.
@@ -220,13 +219,6 @@ impl<'a> Source<'a> {
             return Some(x as u32);
         }
 
-        // Handling unicode characters split off into separate function,
-        // so this function (ASCII common case) is more likely to be inlined, and smaller when it is
-        Some(self.next_code_point_unicode(x))
-    }
-
-    #[cold]
-    fn next_code_point_unicode(&mut self, x: u8) -> u32 {
         debug_assert!(is_utf8_valid_byte(x) && !is_utf8_cont_byte(x));
 
         // Multibyte case follows
@@ -256,7 +248,7 @@ impl<'a> Source<'a> {
             }
         }
 
-        ch
+        Some(ch)
     }
 
     /// Get next byte of source, and advance position to after it.
