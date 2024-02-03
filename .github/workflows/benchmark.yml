@@ -11,10 +11,11 @@ on:
   push:
     branches:
       - main
+      - lexer-string4
     paths:
       - '**/*.rs'
       - 'Cargo.lock'
-      - '!.github/workflows/benchmark.yml'
+      - '.github/workflows/benchmark.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

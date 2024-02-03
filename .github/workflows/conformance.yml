@@ -20,6 +20,7 @@ on:
   push:
     branches:
       - main
+      - lexer-string4
     paths-ignore:
       - '**/*.md'
       - '**/*.yml'
@@ -31,6 +32,7 @@ on:
       - 'crates/oxc_linter/**'
       - 'crates/oxc_type_synthesis/**'
       - 'crates/oxc_wasm/**'
+      - '!.github/workflows/conformance.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - main
+      - lexer-string4
     paths-ignore:
       - '**/*.md'
       - '**/*.yml'
