@@ -80,7 +80,7 @@ pub(super) struct Source<'a> {
 impl<'a> Source<'a> {
     /// Create `Source` from `&str`.
     pub(super) fn new(mut source_text: &'a str) -> Self {
-        // If source exceeds size limit, substitute a short source which will fail to parse.
+        // If source text exceeds size limit, substitute a short source text which will fail to parse.
         // `Parser::parse` will convert error to `diagnostics::OverlongSource`.
         if source_text.len() > MAX_LEN {
             source_text = "\0";
@@ -89,7 +89,7 @@ impl<'a> Source<'a> {
         let start = source_text.as_ptr();
         // SAFETY: Adding `source_text.len()` to the starting pointer gives a pointer
         // at the end of `source_text`. `end` will never be dereferenced, only checked
-        // for direct pointer equality with `current` to check if at end of file.
+        // for direct pointer equality with `ptr` to check if at end of file.
         let end = unsafe { start.add(source_text.len()) };
 
         Self { start, end, ptr: start, _marker: PhantomData }
@@ -112,9 +112,9 @@ impl<'a> Source<'a> {
     pub(super) fn remaining(&self) -> &'a str {
         // SAFETY:
         // `start` and `end` are created from a `&str` in `Source::new` so span a single allocation.
-        // Contract of `Source` is that `ptr` is always `>= start` and `<= end`,
+        // Invariant of `Source` is that `ptr` is always >= `start` and <= `end`,
         // so a slice spanning `ptr` to `end` will always be part of of a single allocation.
-        // Contract of `Source` is that `ptr` is always on a UTF-8 character boundary,
+        // Invariant of `Source` is that `ptr` is always on a UTF-8 character boundary,
         // so slice from `ptr` to `end` will always be a valid UTF-8 string.
         unsafe {
             let len = self.end as usize - self.ptr as usize;
@@ -301,7 +301,7 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// Get next bytes of source, and advance position to after it, without bounds-check.
+    /// Get next bytes of source, and advance position to after it, without EOF bounds-check.
     ///
     /// # SAFETY
     /// Caller must ensure `Source` is not at end of file.
@@ -313,9 +313,8 @@ impl<'a> Source<'a> {
     ///
     /// Caller must ensure one of:
     ///
-    /// 1. No byte is returned (end of file).
-    /// 2. The byte returned is ASCII.
-    /// 3. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
+    /// 1. The byte returned is ASCII.
+    /// 2. Further calls to `Source::next_byte` or `Source::next_byte_unchecked` are made
     ///    to consume the rest of the multi-byte UTF-8 character, before calling any other methods
     ///    of `Source` (even safe methods) which rely on `Source` being positioned on a UTF-8
     ///    character boundary, or before passing control back to other safe code which may call them.
@@ -324,10 +323,10 @@ impl<'a> Source<'a> {
     /// are *not* safe to call until one of above conditions is satisfied.
     #[inline]
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
-        // SAFETY: Caller guarantees not at end of file i.e. `self.ptr != self.end`.
-        // Methods of this type provide no way for `self.ptr` to be before `self.start`
-        // or after `self.end`. Therefore always valid to read a byte from `self.ptr`,
-        // and incrementing `self.ptr` cannot result in `self.ptr > self.end`.
+        // SAFETY: Caller guarantees not at end of file i.e. `ptr != end`.
+        // Methods of this type provide no way for `ptr` to be before `start` or after `end`.
+        // Therefore always valid to read a byte from `ptr`, and incrementing `ptr` cannot result
+        // in `ptr > end`.
         let byte = self.peek_byte_unchecked();
         self.ptr = self.ptr.add(1);
         byte
@@ -359,7 +358,7 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// Peek next byte of source without consuming it, without bounds-check.
+    /// Peek next byte of source without consuming it, without EOF bounds-check.
     ///
     /// # SAFETY
     /// Caller must ensure `Source` is not at end of file.
