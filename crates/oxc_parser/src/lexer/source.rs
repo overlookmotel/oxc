@@ -210,13 +210,13 @@ impl<'a> Source<'a> {
     /// https://doc.rust-lang.org/src/core/str/validations.rs.html#36
     //
     // TODO: Try splitting this into 2 functions so common case can be inlined
-    #[allow(clippy::cast_lossless)]
     #[inline]
     fn next_code_point(&mut self) -> Option<u32> {
         // Decode UTF-8.
         // SAFETY: If next byte is not ASCII, this function consumes further bytes until end of UTF-8
         // character sequence, leaving `ptr` positioned on next UTF-8 character boundary, or at EOF.
         let x = unsafe { self.next_byte() }?;
+        #[allow(clippy::cast_lossless)]
         if x < 128 {
             return Some(x as u32);
         }
@@ -239,6 +239,7 @@ impl<'a> Source<'a> {
             // SAFETY: `Source` contains a valid UTF-8 string, and 1st byte indicates it is start
             // of a 3 or 4-byte sequence, so guaranteed there is a further byte to be consumed.
             let z = unsafe { self.next_byte_unchecked() };
+            #[allow(clippy::cast_lossless)]
             let y_z = utf8_acc_cont_byte((y & CONT_MASK) as u32, z);
             ch = init << 12 | y_z;
             if x >= 0xF0 {
