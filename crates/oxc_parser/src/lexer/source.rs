@@ -196,16 +196,29 @@ impl<'a> Source<'a> {
     /// Get next char of source, and advance position to after it.
     #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
-        // Create a `Chars` iterator, get next char, and then update `self.ptr`
-        // to match `Chars` iterator's pointer afterwards
+        // Check not at EOF and handle ASCII bytes
+        let byte = self.peek_byte()?;
+        if byte.is_ascii() {
+            // SAFETY: We already exited if at EOF, so `ptr < end`.
+            // So incrementing `ptr` cannot result in `ptr > end`.
+            // Current byte is ASCII, so incremented `ptr` must be on a UTF-8 character boundary.
+            unsafe { self.ptr = self.ptr.add(1) };
+            return Some(byte as char);
+        }
+
+        // Multi-byte Unicode character.
+        // Check invariant that `ptr` is on a UTF-8 character boundary.
+        debug_assert!(!is_utf8_cont_byte(byte));
+
+        // Create a `Chars` iterator, get next char from it, and then update `self.ptr`
+        // to match `Chars` iterator's pointer afterwards.
+        // `Chars` iterator upholds same invariants as `Source`, so its pointer is guaranteed
+        // to be valid as `self.ptr`.
         let mut chars = self.remaining().chars();
-        // TODO: Only update pointer if `chars.next().is_some()`?
-        // Presumably it gets inlined, and there's a branch on that condition anyway.
-        // TODO: Maybe handle ASCII with `peek_byte()` and `next_byte()`?
-        // TODO: Add `debug_assert!` that next byte is not UTF-8 continuation byte.
-        let maybe_char = chars.next();
+        // SAFETY: We know that there's a byte to be consumed, so `chars.next()` must return `Some(_)`
+        let c = unsafe { chars.next().unwrap_unchecked() };
         self.ptr = chars.as_str().as_ptr();
-        maybe_char
+        Some(c)
     }
 
     /// Get next byte of source, and advance position to after it.
@@ -285,16 +298,41 @@ impl<'a> Source<'a> {
     /// Peek next char of source, without consuming it.
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
-        // TODO: Add `debug_assert!` that next byte is not UTF-8 continuation byte
-        self.remaining().chars().next()
+        // Check not at EOF and handle ASCII bytes
+        let byte = self.peek_byte()?;
+        if byte.is_ascii() {
+            return Some(byte as char);
+        }
+
+        // Multi-byte Unicode character.
+        // Check invariant that `ptr` is on a UTF-8 character boundary.
+        debug_assert!(!is_utf8_cont_byte(byte));
+
+        // Create a `Chars` iterator, and get next char from it
+        let mut chars = self.remaining().chars();
+        // SAFETY: We know that there's a byte to be consumed, so `chars.next()` must return `Some(_)`.
+        // Could just return `chars.next()` here, but making it clear to compiler that this branch
+        // always returns `Some(_)` may help it optimize the caller. Compiler seems to have difficulty
+        // "seeing into" `Chars` iterator and making deductions.
+        let c = unsafe { chars.next().unwrap_unchecked() };
+        Some(c)
     }
 
     /// Peek next next char of source, without consuming it.
     #[inline]
     pub(super) fn peek_char2(&self) -> Option<char> {
+        // Handle EOF
+        // TODO: Replace all these EOF checks with `self.is_eof()`
+        if self.ptr == self.end {
+            return None;
+        }
+
+        // Check invariant that `ptr` is on a UTF-8 character boundary.
+        debug_assert!(!is_utf8_cont_byte(self.peek_byte().unwrap()));
+
         let mut chars = self.remaining().chars();
-        // TODO: Put `?` after 1st `chars.next()` to exit early if at EOF?
-        chars.next();
+        // SAFETY: We already checked not at EOF, so `chars.next()` must return `Some(_)`
+        unsafe { chars.next().unwrap_unchecked() };
         chars.next()
     }
 
