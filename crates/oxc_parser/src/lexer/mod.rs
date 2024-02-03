@@ -165,10 +165,6 @@ impl<'a> Lexer<'a> {
             unsafe { self.source.set_position(checkpoint.position) };
         }
 
-        // Reset the current token for `read_next_token`
-        // TODO: Is this still required?
-        self.current.token = Token::default();
-
         for _i in self.lookahead.len()..n {
             let kind = self.read_next_token();
             let peeked = self.finish_next(kind);
