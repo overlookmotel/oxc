@@ -155,7 +155,6 @@ impl<'a> Lexer<'a> {
             return self.lookahead[n - 1].token;
         }
 
-        let token = self.current.token;
         let position = self.source.position();
 
         if let Some(checkpoint) = self.lookahead.back() {
@@ -179,7 +178,6 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        self.current.token = token;
         // SAFETY: `position` was created above from `self.source`. `self.source` never changes.
         unsafe { self.source.set_position(position) };
 
