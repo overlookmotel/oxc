@@ -124,7 +124,7 @@ impl<'a> Source<'a> {
         }
     }
 
-    // Return if at end of source.
+    // Return whether at end of source.
     #[inline]
     pub(super) fn is_eof(&self) -> bool {
         self.ptr == self.end
@@ -192,7 +192,7 @@ impl<'a> Source<'a> {
         self.ptr = new_ptr;
     }
 
-    /// Get next char and move `current` on to after it.
+    /// Consume next char of source.
     #[inline]
     pub(super) fn next_char(&mut self) -> Option<char> {
         self.next_code_point().map(|ch| {
@@ -208,6 +208,8 @@ impl<'a> Source<'a> {
     /// Get next code point.
     /// Copied from implementation of `std::str::Chars`.
     /// https://doc.rust-lang.org/src/core/str/validations.rs.html#36
+    //
+    // TODO: Try splitting this into 2 functions so common case can be inlined
     #[allow(clippy::cast_lossless)]
     #[inline]
     fn next_code_point(&mut self) -> Option<u32> {
@@ -252,7 +254,7 @@ impl<'a> Source<'a> {
         Some(ch)
     }
 
-    /// Get next byte of source, if not at EOF.
+    /// Consume next byte of source.
     ///
     /// # SAFETY
     /// This function may leave `Source` positioned in middle of a UTF-8 character sequence,
@@ -294,7 +296,7 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// Get next byte of source, without bounds-check.
+    /// Consume next byte of source, without bounds-check.
     ///
     /// # SAFETY
     /// Caller must ensure `Source` is not at end of file.
@@ -326,13 +328,13 @@ impl<'a> Source<'a> {
         byte
     }
 
-    /// Get next char, without consuming it.
+    /// Peek next char of source, without consuming it.
     #[inline]
     pub(super) fn peek_char(&self) -> Option<char> {
         self.clone().next_char()
     }
 
-    /// Peek next byte of source without consuming it, if not at EOF.
+    /// Peek next byte of source without consuming it.
     #[inline]
     pub(super) fn peek_byte(&self) -> Option<u8> {
         if self.ptr == self.end {
