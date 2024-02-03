@@ -142,7 +142,12 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) unsafe fn set_position(&mut self, pos: SourcePosition) {
         // `SourcePosition` always upholds the invariants of `Source`,
-        // as long as it's created from this `Source`
+        // as long as it's created from this `Source`.
+        // SAFETY: `read_u8`'s contract is upheld by:
+        // * The preceding checks that `pos.ptr` >= `self.start` and < `self.end`.
+        // * `Source`'s invariants guarantee that `self.start` - `self.end` contains allocated memory.
+        // * `Source::new` takes an immutable ref `&str`, guaranteeing that the memory `pos.ptr`
+        //   addresses cannot be aliased by a `&mut` ref as long as `Source` exists.
         debug_assert!(
             pos.ptr >= self.start
                 && pos.ptr <= self.end
@@ -181,6 +186,9 @@ impl<'a> Source<'a> {
         // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary.
         // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
         // not at the end, so valid to read a byte.
+        // `Source`'s invariants guarantee that `self.start` - `self.end` contains allocated memory.
+        // `Source::new` takes an immutable ref `&str`, guaranteeing that the memory `new_ptr`
+        // addresses cannot be aliased by a `&mut` ref as long as `Source` exists.
         let byte = unsafe { read_u8(new_ptr) };
         assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
@@ -349,6 +357,9 @@ impl<'a> Source<'a> {
     pub(super) unsafe fn peek_byte_unchecked(&self) -> u8 {
         // SAFETY: Caller guarantees `ptr` is before `end` (i.e. not at end of file).
         // Methods of this type provide no way to allow `ptr` to be before `start`.
+        // `Source`'s invariants guarantee that `self.start` - `self.end` contains allocated memory.
+        // `Source::new` takes an immutable ref `&str`, guaranteeing that the memory `self.ptr`
+        // addresses cannot be aliased by a `&mut` ref as long as `Source` exists.
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
         read_u8(self.ptr)
     }
@@ -370,21 +381,23 @@ const fn is_utf8_cont_byte(byte: u8) -> bool {
 
 /// Read `u8` from `*const u8` pointer.
 ///
-/// Adapted from `core::slice::iter::next`.
+/// Using `as_ref()` for reading is copied from `core::slice::iter::next`.
 /// https://doc.rust-lang.org/src/core/slice/iter.rs.html#132
 /// https://doc.rust-lang.org/src/core/slice/iter/macros.rs.html#156-168
 ///
-/// Could just use `*ptr` or `ptr.read()` for this use case, but safer to follow Rust's authors,
-/// in case there's a subtlety I (@overlookmotel) don't understand.
-/// This is also improves Lexer benchmarks by approx 7%, compared to `*ptr` or `ptr.read()`.
+/// This is about 7% faster than `*ptr` or `ptr.read()`, presumably because it tells the compiler
+/// it can rely on the memory being immutable, because if a `&mut` reference existed, that would
+/// violate Rust's aliasing rules.
 ///
 /// # SAFETY
-/// Caller must ensure pointer is non-null and valid for read of a `u8`.
+/// Caller must ensure pointer is non-null, and points to allocated, initialized memory.
+/// Pointer must point to within an object for which no `&mut` references are currently held.
 #[inline]
 unsafe fn read_u8(ptr: *const u8) -> u8 {
-    // SAFETY: Caller guarantees pointer is non-null and valid for read of a `u8`.
+    // SAFETY: Caller guarantees pointer is non-null, and points to allocated, initialized memory.
+    // Caller guarantees no mutable references to same memory exist, thus upholding Rust's aliasing rules.
+    // Pointer is "dereferenceable" by definition as a `u8` is 1 byte and cannot span multiple objects.
     // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
-    // TODO: More safety comments
     debug_assert!(!ptr.is_null());
     *ptr.as_ref().unwrap_unchecked()
 }
