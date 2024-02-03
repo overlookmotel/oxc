@@ -2,11 +2,10 @@
 
 use crate::MAX_LEN;
 
-use std::{marker::PhantomData, slice, str};
+use std::{marker::PhantomData, ptr::NonNull, slice, str};
 
 // TODO: Try to speed up reverting to a checkpoint
 // TODO: Is `*self.ptr` better than `self.ptr.read()`?
-// TODO: Use `NonNull` for all the pointers?
 // TODO: Investigate why semantic benchmarks dropped on "Reduce size of Lookahead struct" commit.
 // Is there a bug?
 
@@ -69,11 +68,11 @@ use std::{marker::PhantomData, slice, str};
 #[derive(Clone)]
 pub(super) struct Source<'a> {
     /// Pointer to start of source string. Never altered after initialization.
-    start: *const u8,
+    start: NonNull<u8>,
     /// Pointer to end of source string. Never altered after initialization.
-    end: *const u8,
+    end: NonNull<u8>,
     /// Pointer to current position in source string
-    ptr: *const u8,
+    ptr: NonNull<u8>,
     /// Marker for immutable borrow of source string
     _marker: PhantomData<&'a str>,
 }
@@ -93,6 +92,11 @@ impl<'a> Source<'a> {
         // for direct pointer equality with `current` to check if at end of file.
         let end = unsafe { start.add(source_text.len()) };
 
+        // SAFETY: TODO
+        let start = unsafe { NonNull::new_unchecked(start as *mut u8) };
+        // SAFETY: TODO
+        let end = unsafe { NonNull::new_unchecked(end as *mut u8) };
+
         Self { start, end, ptr: start, _marker: PhantomData }
     }
 
@@ -102,8 +106,8 @@ impl<'a> Source<'a> {
         // SAFETY: `start` and `end` are created from a `&str` in `Source::new`,
         // so guaranteed to be start and end of a valid UTF-8 string
         unsafe {
-            let len = self.end as usize - self.start as usize;
-            let slice = slice::from_raw_parts(self.start, len);
+            let len = self.end.as_ptr() as usize - self.start.as_ptr() as usize;
+            let slice = slice::from_raw_parts(self.start.as_ptr() as *const u8, len);
             str::from_utf8_unchecked(slice)
         }
     }
@@ -118,8 +122,8 @@ impl<'a> Source<'a> {
         // Contract of `Source` is that `ptr` is always on a UTF-8 character boundary,
         // so slice from `ptr` to `end` will always be a valid UTF-8 string.
         unsafe {
-            let len = self.end as usize - self.ptr as usize;
-            let slice = slice::from_raw_parts(self.ptr, len);
+            let len = self.end.as_ptr() as usize - self.ptr.as_ptr() as usize;
+            let slice = slice::from_raw_parts(self.ptr.as_ptr() as *const u8, len);
             debug_assert!(slice.is_empty() || !is_utf8_cont_byte(slice[0]));
             str::from_utf8_unchecked(slice)
         }
@@ -146,10 +150,16 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn set_position(&mut self, pos: SourcePosition) {
         // `SourcePosition` always upholds the invariants of `Source`
-        debug_assert!(pos.ptr >= self.start && pos.ptr <= self.end);
+        debug_assert!(
+            pos.ptr.as_ptr() >= self.start.as_ptr() && pos.ptr.as_ptr() <= self.end.as_ptr()
+        );
         // SAFETY: We just checked `pos.ptr` is within bounds of source `&str`,
         // so safe to read from if not at end
-        debug_assert!(pos.ptr == self.end || !is_utf8_cont_byte(unsafe { pos.ptr.read() }));
+        debug_assert!(
+            pos.ptr == self.end
+                // SAFETY: TODO
+                || !is_utf8_cont_byte(unsafe { (pos.ptr.as_ptr() as *const u8).read() })
+        );
         self.ptr = pos.ptr;
     }
 
@@ -158,7 +168,7 @@ impl<'a> Source<'a> {
     #[inline]
     pub(super) fn offset(&self) -> u32 {
         // Cannot overflow `u32` because of `MAX_LEN` check in `Source::new`
-        (self.ptr as usize - self.start as usize) as u32
+        (self.ptr.as_ptr() as usize - self.start.as_ptr() as usize) as u32
     }
 
     /// Move current position back by `n` bytes.
@@ -173,7 +183,7 @@ impl<'a> Source<'a> {
         assert!(n > 0, "Cannot call `Source::back` with 0");
 
         // Ensure not attempting to go back to before start of source
-        let bytes_consumed = self.ptr as usize - self.start as usize;
+        let bytes_consumed = self.ptr.as_ptr() as usize - self.start.as_ptr() as usize;
         assert!(
             n <= bytes_consumed,
             "Cannot go back {n} bytes - only {bytes_consumed} bytes consumed"
@@ -181,16 +191,17 @@ impl<'a> Source<'a> {
 
         // SAFETY: We have checked that `n` is less than distance between `start` and `ptr`,
         // so `new_ptr` cannot be outside of allocation of original `&str`
-        let new_ptr = unsafe { self.ptr.sub(n) };
+        let new_ptr = unsafe { self.ptr.as_ptr().sub(n) };
 
         // Enforce invariant that `ptr` must be positioned on a UTF-8 character boundary.
         // SAFETY: `new_ptr` is in bounds of original `&str`, and `n > 0` assertion ensures
         // not at the end, so valid to read a byte.
-        let byte = unsafe { new_ptr.read() };
+        let byte = unsafe { (new_ptr as *const u8).read() };
         assert!(!is_utf8_cont_byte(byte), "Offset is not on a UTF-8 character boundary");
 
         // Move current position. The checks above satisfy `Source`'s invariants.
-        self.ptr = new_ptr;
+        // SAFETY: TODO
+        self.ptr = unsafe { NonNull::new_unchecked(new_ptr) };
     }
 
     /// Get next char and move `current` on to after it.
@@ -323,7 +334,7 @@ impl<'a> Source<'a> {
         // or after `self.end`. Therefore always valid to read a byte from `self.ptr`,
         // and incrementing `self.ptr` cannot result in `self.ptr > self.end`.
         let byte = self.peek_byte_unchecked();
-        self.ptr = self.ptr.add(1);
+        self.ptr = NonNull::new_unchecked(self.ptr.as_ptr().add(1));
         byte
     }
 
@@ -354,14 +365,14 @@ impl<'a> Source<'a> {
         // SAFETY: Caller guarantees `ptr` is before `end` (i.e. not at end of file).
         // Methods of this type provide no way to allow `ptr` to be before `start`.
         debug_assert!(self.ptr >= self.start && self.ptr < self.end);
-        self.ptr.read()
+        (self.ptr.as_ptr() as *const u8).read()
     }
 }
 
 /// Wrapper around a pointer to a position in `Source`.
 #[derive(Debug, Clone, Copy)]
 pub struct SourcePosition<'a> {
-    ptr: *const u8,
+    ptr: NonNull<u8>,
     _marker: PhantomData<&'a str>,
 }
 
