@@ -12,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHasher};
 /// See
 /// * <https://tc39.es/ecma262/#table-additional-fields-of-source-text-module-records>
 /// * <https://tc39.es/ecma262/#cyclic-module-record>
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ModuleRecord {
     /// Resolved absolute path to this module record
     pub resolved_absolute_path: PathBuf,
