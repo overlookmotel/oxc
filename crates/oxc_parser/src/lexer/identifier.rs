@@ -63,7 +63,7 @@ impl<'a> Lexer<'a> {
             // benchmarks.
             // The compiler unrolls this loop.
             for _i in 0..SEARCH_BATCH_SIZE {
-                next_byte = *curr;
+                next_byte = read_u8(curr);
                 if !is_identifier_part_ascii_byte(next_byte) {
                     break 'outer;
                 }
@@ -118,7 +118,7 @@ impl<'a> Lexer<'a> {
                 return id_without_first;
             }
 
-            next_byte = *curr;
+            next_byte = read_u8(curr);
             if !is_identifier_part_ascii_byte(next_byte) {
                 break;
             }
@@ -434,4 +434,25 @@ impl<'a> Lexer<'a> {
 unsafe fn str_from_start_and_end<'a>(start: *const u8, end: *const u8) -> &'a str {
     let slice = std::slice::from_raw_parts(start, end as usize - start as usize);
     std::str::from_utf8_unchecked(slice)
+}
+
+/// Read `u8` from `*const u8` pointer.
+///
+/// Adapted from `core::slice::iter::next`.
+/// https://doc.rust-lang.org/src/core/slice/iter.rs.html#132
+/// https://doc.rust-lang.org/src/core/slice/iter/macros.rs.html#156-168
+///
+/// Could just use `ptr.read()` or `*ptr` for this use case, but safer to follow Rust's authors,
+/// in case there's a subtlety I (@overlookmotel) don't understand.
+/// This is also improves Lexer benchmarks by approx 7%, compared to `ptr.read()` or `*ptr`.
+///
+/// # SAFETY
+/// Caller must ensure pointer is non-null and valid for read of a `u8`.
+#[inline]
+unsafe fn read_u8(ptr: *const u8) -> u8 {
+    // SAFETY: Caller guarantees pointer is non-null and valid for read of a `u8`.
+    // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
+    // TODO: More safety comments
+    debug_assert!(!ptr.is_null());
+    *ptr.as_ref().unwrap_unchecked()
 }
