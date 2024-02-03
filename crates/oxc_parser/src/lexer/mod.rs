@@ -178,6 +178,13 @@ impl<'a> Lexer<'a> {
             });
         }
 
+        // Call to `finish_next` in loop above leaves `self.current.token = Token::default()`.
+        // Only circumstance in which `self.current.token` wouldn't have been default at start of this
+        // function is if we were at very start of file, before any tokens have been read, when
+        // `token.is_on_new_line` is `true`. But `lookahead` isn't called before the first token is
+        // read, so that's not possible. So no need to restore `self.current.token` here.
+        // It's already in same state as it was at start of this function.
+
         // SAFETY: `position` was created above from `self.source`. `self.source` never changes.
         unsafe { self.source.set_position(position) };
 
