@@ -55,6 +55,8 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
 ///
 /// SAFETY: Only use this macro to define byte handlers for ASCII characters.
 ///
+/// Handlers are defined as functions instead of closures, so they are named in flame graphs.
+///
 /// ```
 /// ascii_byte_handler!(SPS(lexer) {
 ///   lexer.consume_char();
@@ -65,28 +67,36 @@ static BYTE_HANDLERS: [ByteHandler; 256] = [
 /// expands to:
 ///
 /// ```
-/// const SPS: ByteHandler = |lexer| {
-///   unsafe {
-///     use assert_unchecked::assert_unchecked;
-///     let s = lexer.current.chars.as_str();
-///     assert_unchecked!(!s.is_empty());
-///     assert_unchecked!(s.as_bytes()[0] < 128);
+/// const SPS: ByteHandler = {
+///   #[allow(non_snake_case)]
+///   fn SPS(lexer: &mut Lexer) {
+///     unsafe {
+///       use assert_unchecked::assert_unchecked;
+///       let s = lexer.current.chars.as_str();
+///       assert_unchecked!(!s.is_empty());
+///       assert_unchecked!(s.as_bytes()[0] < 128);
+///     }
+///     lexer.consume_char();
+///     Kind::WhiteSpace
 ///   }
-///   lexer.consume_char();
-///   Kind::WhiteSpace
+///   SPS
 /// };
 /// ```
 macro_rules! ascii_byte_handler {
     ($id:ident($lex:ident) $body:expr) => {
-        const $id: ByteHandler = |$lex| {
-            // SAFETY: This macro is only used for ASCII characters
-            unsafe {
-                use assert_unchecked::assert_unchecked;
-                let s = $lex.current.chars.as_str();
-                assert_unchecked!(!s.is_empty());
-                assert_unchecked!(s.as_bytes()[0] < 128);
+        const $id: ByteHandler = {
+            #[allow(non_snake_case)]
+            fn $id($lex: &mut Lexer) -> Kind {
+                // SAFETY: This macro is only used for ASCII characters
+                unsafe {
+                    use assert_unchecked::assert_unchecked;
+                    let s = $lex.current.chars.as_str();
+                    assert_unchecked!(!s.is_empty());
+                    assert_unchecked!(s.as_bytes()[0] < 128);
+                }
+                $body
             }
-            $body
+            $id
         };
     };
 }
@@ -591,8 +601,13 @@ ascii_byte_handler!(L_Y(lexer) match &lexer.identifier_name_handler()[1..] {
 
 // Non-ASCII characters.
 // NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII chars.
-#[allow(clippy::redundant_closure_for_method_calls)]
-const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
+const UNI: ByteHandler = {
+    #[allow(non_snake_case)]
+    fn UNI(lexer: &mut Lexer) -> Kind {
+        lexer.unicode_char_handler()
+    }
+    UNI
+};
 
 // UTF-8 continuation bytes (128-191) (i.e. middle of a multi-byte UTF-8 sequence)
 // + and byte values which are not legal in UTF-8 strings (248-255).
@@ -600,4 +615,10 @@ const UNI: ByteHandler = |lexer| lexer.unicode_char_handler();
 // so something has gone wrong if we get here.
 // https://en.wikipedia.org/wiki/UTF-8
 // NB: Must not use `ascii_byte_handler!()` macro, as this handler is for non-ASCII bytes.
-const UER: ByteHandler = |_| unreachable!();
+const UER: ByteHandler = {
+    #[allow(non_snake_case)]
+    fn UER(_lexer: &mut Lexer) -> Kind {
+        unreachable!();
+    }
+    UER
+};
