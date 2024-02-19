@@ -245,6 +245,52 @@ macro_rules! safe_byte_match_table {
 }
 pub(crate) use safe_byte_match_table;
 
+/// Macro to repeat code `SEARCH_BATCH_SIZE` times.
+macro_rules! batch_repeat {
+    ($($body:tt)*) => {
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+        $($body)*
+    };
+}
+pub(crate) use batch_repeat;
+
+// Check `batch_repeat!` macro repeats `SEARCH_BATCH_SIZE` times
+const _: () = {
+    let mut x = 0;
+    batch_repeat!( x += 1; );
+    assert!(x == SEARCH_BATCH_SIZE);
+};
+
 /// Macro to search for first byte matching a `ByteMatchTable` or `SafeByteMatchTable`.
 ///
 /// Search processes source in batches of `SEARCH_BATCH_SIZE` bytes for speed.
@@ -513,7 +559,7 @@ macro_rules! byte_search {
                 #[allow(unused_assignments)]
                 let mut $match_byte = 0;
                 'inner: loop {
-                    for _i in 0..crate::lexer::search::SEARCH_BATCH_SIZE {
+                    crate::lexer::search::batch_repeat!(
                         // SAFETY: `$pos` cannot go out of bounds in this loop (see above)
                         $match_byte = unsafe { $pos.read() };
                         if $table.matches($match_byte) {
@@ -524,7 +570,7 @@ macro_rules! byte_search {
                         // SAFETY: `$pos` cannot go out of bounds in this loop (see above).
                         // Also see above about UTF-8 character boundaries invariant.
                         $pos = unsafe { $pos.add(1) };
-                    }
+                    );
                     // No match in batch - search next batch
                     continue 'outer;
                 }
