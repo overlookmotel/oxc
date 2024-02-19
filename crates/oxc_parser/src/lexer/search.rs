@@ -510,14 +510,12 @@ macro_rules! byte_search {
                 // `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above ensures
                 // there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
                 // So calls to `$pos.read()` and `$pos.add(1)` in this loop cannot go out of bounds.
-                #[allow(unused_assignments)]
-                let mut $match_byte = 0;
-                'inner: loop {
+                let $match_byte = 'inner: loop {
                     for _i in 0..crate::lexer::search::SEARCH_BATCH_SIZE {
                         // SAFETY: `$pos` cannot go out of bounds in this loop (see above)
-                        $match_byte = unsafe { $pos.read() };
-                        if $table.matches($match_byte) {
-                            break 'inner;
+                        let byte = unsafe { $pos.read() };
+                        if $table.matches(byte) {
+                            break 'inner byte;
                         }
 
                         // No match - continue searching batch.
@@ -527,7 +525,7 @@ macro_rules! byte_search {
                     }
                     // No match in batch - search next batch
                     continue 'outer;
-                }
+                };
 
                 // Found match. Check if should continue.
                 {
