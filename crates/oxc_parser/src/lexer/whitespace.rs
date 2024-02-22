@@ -15,7 +15,7 @@ impl NotWhitespaceMatcher {
     #[allow(clippy::unused_self)]
     #[inline]
     pub const fn matches(&self, b: u8) -> bool {
-        !matches!(b, b' ' | b'\t' | b'\r' | b'\n')
+        !matches!(b, b' ' | b'\t')
     }
 }
 
@@ -30,6 +30,11 @@ impl<'a> Lexer<'a> {
         byte_search! {
             lexer: self,
             table: NotWhitespaceMatcher,
+            continue_if: |matched_byte, _pos| {
+                // TODO: Branchlessly consume a following `\n`.
+                // Common after `\r`, and double line breaks are also not so rare.
+                matches!(matched_byte, b'\r' | b'\n')
+            },
             handle_match: |_next_byte, _start| {
                 Kind::Skip
             },
