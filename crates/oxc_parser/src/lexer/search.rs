@@ -573,6 +573,7 @@ macro_rules! byte_search {
                             let mut matches = AlignedBytes::new();
                             debug_assert_eq!(batch.len(), matches.0.len());
                             debug_assert_eq!(batch.len(), LANES);
+                            // TODO: Try `get_unchecked` / `set_unchecked` here
                             for i in 0..batch.len() {
                                 matches.0[i] = ($table.matches(batch[i]) as u8) * 0xFF;
                             }
