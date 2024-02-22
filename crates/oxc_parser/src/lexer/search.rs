@@ -7,15 +7,15 @@
 use oxc_index::{const_assert, const_assert_eq};
 
 /// SIMD lane width
-pub const LANES: usize = 16;
+pub const LANES: usize = 8;
 
 /// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
 const_assert!(SEARCH_BATCH_SIZE >= LANES);
 const_assert_eq!(SEARCH_BATCH_SIZE % LANES, 0);
 
-/// Aligned batch of 16 bytes
-#[repr(C, align(16))]
+/// Aligned batch of 8 bytes
+#[repr(C, align(8))]
 pub struct AlignedBytes(pub [u8; LANES]);
 
 const_assert_eq!(std::mem::size_of::<AlignedBytes>(), LANES);
@@ -34,7 +34,7 @@ impl AlignedBytes {
 
     #[inline]
     pub fn first_non_zero(&self) -> usize {
-        let u = u128::from_ne_bytes(self.0);
+        let u = u64::from_ne_bytes(self.0);
         if cfg!(target_endian = "little") {
             u.trailing_zeros() as usize / 8
         } else {
