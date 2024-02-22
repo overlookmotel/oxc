@@ -29,6 +29,12 @@ impl NotAlphabeticMatcher {
 
     #[allow(clippy::unused_self)]
     #[inline]
+    pub const fn is_table(&self) -> bool {
+        false
+    }
+
+    #[allow(clippy::unused_self)]
+    #[inline]
     pub const fn matches(&self, b: u8) -> bool {
         !b.is_ascii_alphabetic()
     }
