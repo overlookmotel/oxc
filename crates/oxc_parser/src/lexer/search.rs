@@ -29,16 +29,24 @@ impl AlignedBytes {
 
     #[inline]
     pub fn first_non_zero(&self) -> usize {
-        // TODO: Handle big-endian
+        #[inline]
+        fn zeros(u: u128) -> usize {
+            if cfg!(target_endian = "little") {
+                u.trailing_zeros() as usize
+            } else {
+                u.leading_zeros() as usize
+            }
+        }
+
         let hi: [u8; 16] = self.0[..16].try_into().unwrap();
         let lo: [u8; 16] = self.0[16..].try_into().unwrap();
-        let hi = u128::from_le_bytes(hi);
-        let lo = u128::from_le_bytes(lo);
+        let hi = u128::from_ne_bytes(hi);
+        let lo = u128::from_ne_bytes(lo);
         // TODO: Try to remove this branch
         if hi != 0 {
-            hi.trailing_zeros() as usize / 8
+            zeros(hi) / 8
         } else {
-            (lo.trailing_zeros() as usize) / 8 + 16
+            zeros(lo) / 8 + 16
         }
     }
 }
