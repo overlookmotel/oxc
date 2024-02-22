@@ -6,11 +6,12 @@
 
 use oxc_index::const_assert_eq;
 
+/// SIMD lane width
+pub const LANES: usize = 16;
+
 /// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
-
-/// SIMD lane width
-const LANES: usize = 16;
+const_assert_eq!(SEARCH_BATCH_SIZE % LANES, 0);
 
 /// Aligned batch of 16 bytes
 #[repr(C, align(16))]
@@ -40,11 +41,6 @@ impl AlignedBytes {
         }
     }
 }
-
-macro_rules! repeat_twice {
-    ($body:block) => { $body $body }
-}
-pub(crate) use repeat_twice;
 
 /// Byte matcher lookup table.
 ///
@@ -546,11 +542,13 @@ macro_rules! byte_search {
                 // there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
                 // So calls to `$pos.read()` and `$pos.add(1)` in this loop cannot go out of bounds.
                 let $match_byte = 'inner: loop {
+                    use crate::lexer::search::{SEARCH_BATCH_SIZE, LANES, AlignedBytes};
+
                     // `is_table` is a const function, so compiler will select one of these branches,
                     // and remove the other
                     if $table.is_table() {
                         // Use byte table lookup, byte-by-byte
-                        for _i in 0..crate::lexer::search::SEARCH_BATCH_SIZE {
+                        for _i in 0..SEARCH_BATCH_SIZE {
                             // SAFETY: `$pos` cannot go out of bounds in this loop (see above)
                             let byte = unsafe { $pos.read() };
                             if $table.matches(byte) {
@@ -566,15 +564,15 @@ macro_rules! byte_search {
                         // Matching is simple enough that we can use calculation to match bytes,
                         // instead of table lookup. Compiler will turn the `for` loop into a few
                         // SIMD instructions to search whole batch in one go.
-                        // TODO: Try doing this with a loop instead
-                        crate::lexer::search::repeat_twice! {{
+                        for _ in 0..(SEARCH_BATCH_SIZE / LANES) {
                             // SAFETY: `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above
-                            // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
-                            // We read 32 bytes in 2 x 16 blocks.
+                            // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`
+                            // at start of this loop. Reading in `SEARCH_BATCH_SIZE / LANES` x blocks
+                            // of `LANES` bytes, so reading cannot go out of bounds.
                             let batch = unsafe { $pos.read16() };
-                            let mut matches = crate::lexer::search::AlignedBytes::new();
+                            let mut matches = AlignedBytes::new();
                             debug_assert_eq!(batch.len(), matches.0.len());
-                            debug_assert_eq!(batch.len() * 2, crate::lexer::search::SEARCH_BATCH_SIZE);
+                            debug_assert_eq!(batch.len(), LANES);
                             for i in 0..batch.len() {
                                 matches.0[i] = ($table.matches(batch[i]) as u8) * 0xFF;
                             }
@@ -603,7 +601,7 @@ macro_rules! byte_search {
                             // SAFETY: There are at least `batch.len()` bytes remaining in `lexer.source`.
                             // Also see above about UTF-8 character boundaries invariant.
                             $pos = unsafe { $pos.add(batch.len()) };
-                        }}
+                        }
                     }
 
                     // No match in batch - search next batch
