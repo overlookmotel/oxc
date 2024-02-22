@@ -600,9 +600,9 @@ macro_rules! byte_search {
 
                             // Found no match in batch.
                             // Advance `$pos` to after end of batch, and continue searching.
-                            // SAFETY: There are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
+                            // SAFETY: There are at least `batch.len()` bytes remaining in `lexer.source`.
                             // Also see above about UTF-8 character boundaries invariant.
-                            unsafe { $pos = $pos.add(batch.len()) };
+                            $pos = unsafe { $pos.add(batch.len()) };
                         }}
                     }
 
