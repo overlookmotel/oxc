@@ -15,11 +15,11 @@ const_assert!(SEARCH_BATCH_SIZE >= LANES);
 const_assert_eq!(SEARCH_BATCH_SIZE % LANES, 0);
 
 /// Aligned batch of 8 bytes
-#[repr(C, align(8))]
+#[repr(C, align(16))]
 pub struct AlignedBytes(pub [u8; LANES]);
 
-const_assert_eq!(std::mem::size_of::<AlignedBytes>(), LANES);
-const_assert_eq!(std::mem::align_of::<AlignedBytes>(), LANES);
+const_assert!(std::mem::size_of::<AlignedBytes>() >= LANES);
+const_assert!(std::mem::align_of::<AlignedBytes>() >= LANES);
 
 impl AlignedBytes {
     #[inline]
