@@ -21,6 +21,19 @@ static ASCII_ID_START_TABLE: SafeByteMatchTable =
 static NOT_ASCII_ID_CONTINUE_TABLE: SafeByteMatchTable =
     safe_byte_match_table!(|b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'$'));
 
+struct NotAlphabeticMatcher;
+impl NotAlphabeticMatcher {
+    #[allow(clippy::unused_self)]
+    #[inline]
+    pub const fn use_table(&self) {}
+
+    #[allow(clippy::unused_self)]
+    #[inline]
+    pub const fn matches(&self, b: u8) -> bool {
+        !b.is_ascii_alphabetic()
+    }
+}
+
 #[inline]
 fn is_identifier_start_ascii_byte(byte: u8) -> bool {
     ASCII_ID_START_TABLE.matches(byte)
@@ -56,8 +69,11 @@ impl<'a> Lexer<'a> {
         // Consume bytes which are part of identifier
         byte_search! {
             lexer: self,
-            table: NOT_ASCII_ID_CONTINUE_TABLE,
+            table: NotAlphabeticMatcher,
             start: after_first,
+            continue_if: |matched_byte, pos| {
+                matched_byte.is_ascii_digit() || matched_byte == b'_' || matched_byte == b'$'
+            },
             handle_match: |next_byte| {
                 // Found a matching byte.
                 // Either end of identifier found, or a Unicode char, or `\` escape.
