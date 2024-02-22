@@ -7,6 +7,9 @@
 /// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
 
+/// Sentinel value for EOF. `0xFF` cannot occur in UTF-8 strings.
+pub const EOF_SENTINEL: u8 = 0xFF;
+
 /// Byte matcher lookup table.
 ///
 /// Create table at compile time as a `static` or `const` with `byte_match_table!` macro.
@@ -480,7 +483,7 @@ macro_rules! byte_search {
         let mut $pos = $start;
         #[allow(unused_unsafe)] // Silence warnings if macro called in unsafe code
         let $match_byte = 'outer: loop {
-            let maybe_byte = if $pos.addr() <= $lexer.source.end_for_batch_search_addr() {
+            let byte = if $pos.addr() <= $lexer.source.end_for_batch_search_addr() {
                 // Search a batch of `SEARCH_BATCH_SIZE` bytes.
                 //
                 // `'inner: loop {}` is not a real loop - it always exits on first turn.
@@ -498,7 +501,7 @@ macro_rules! byte_search {
                         // SAFETY: `$pos` cannot go out of bounds in this loop (see above)
                         let byte = unsafe { $pos.read() };
                         if $table.matches(byte) {
-                            break 'inner Some(byte);
+                            break 'inner byte;
                         }
 
                         // No match - continue searching batch.
@@ -521,7 +524,7 @@ macro_rules! byte_search {
                         // SAFETY: Just checked `$pos` is not at EOF
                         let byte = unsafe { $pos.read() };
                         if $table.matches(byte) {
-                            return Some(byte);
+                            return byte;
                         }
 
                         // No match - continue searching.
@@ -531,14 +534,12 @@ macro_rules! byte_search {
                     }
 
                     // EOF
-                    None
+                    crate::lexer::search::EOF_SENTINEL
                 })
             };
 
-            let $continue_byte = if let Some(byte) = maybe_byte {
-                byte
-            } else {
-                // EOF
+            // Handle EOF
+            if byte == crate::lexer::search::EOF_SENTINEL {
                 return crate::lexer::cold_branch(|| {
                     // Advance `lexer.source`'s position to end of file.
                     $lexer.source.set_position($pos);
@@ -546,21 +547,24 @@ macro_rules! byte_search {
                     let $eof_start = $start;
                     $eof_handler
                 });
-            };
+            }
 
             // Found match. Check if should continue.
             // If `$should_continue` is not defined by macro user, it defaults to `false`.
             // Compiler then const folds out this block.
-            if $should_continue {
-                // Not a match after all - continue searching.
-                // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
-                // See above about UTF-8 character boundaries invariant.
-                $pos = unsafe { $pos.add(1) };
-                continue;
+            {
+                let $continue_byte = byte;
+                if $should_continue {
+                    // Not a match after all - continue searching.
+                    // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
+                    // See above about UTF-8 character boundaries invariant.
+                    $pos = unsafe { $pos.add(1) };
+                    continue;
+                }
             }
 
             // Found match and not continuing
-            break $continue_byte;
+            break byte;
         };
 
         // Advance `lexer.source`'s position up to `$pos`, consuming unmatched bytes.
