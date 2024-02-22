@@ -574,7 +574,7 @@ impl<'a> SourcePosition<'a> {
     #[inline]
     pub(super) unsafe fn read_batch(self) -> &'a [u8; SEARCH_BATCH_SIZE] {
         // SAFETY:
-        // Caller guarantees `self` is not at no later than 2 bytes before end of source text.
+        // Caller guarantees `self` is not at no later than `SEARCH_BATCH_SIZE` bytes before end of source text.
         // `Source` is created from a valid `&str`, so points to allocated, initialized memory.
         // `Source` conceptually holds the source text `&str`, which guarantees to mutable references
         // to the same memory can exist, as that would violate Rust's aliasing rules.
