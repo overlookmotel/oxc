@@ -9,47 +9,42 @@ use oxc_index::const_assert_eq;
 /// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
 
-/// Aligned batch of `SEARCH_BATCH_SIZE` bytes
-#[repr(C, align(32))]
-pub struct AlignedBytes(pub [u8; SEARCH_BATCH_SIZE]);
+/// SIMD lane width
+const LANES: usize = 16;
 
-const_assert_eq!(std::mem::size_of::<AlignedBytes>(), SEARCH_BATCH_SIZE);
-const_assert_eq!(std::mem::align_of::<AlignedBytes>(), SEARCH_BATCH_SIZE);
+/// Aligned batch of 16 bytes
+#[repr(C, align(16))]
+pub struct AlignedBytes(pub [u8; LANES]);
+
+const_assert_eq!(std::mem::size_of::<AlignedBytes>(), LANES);
+const_assert_eq!(std::mem::align_of::<AlignedBytes>(), LANES);
 
 impl AlignedBytes {
     #[inline]
     pub fn new() -> Self {
-        Self([0; SEARCH_BATCH_SIZE])
+        Self([0; LANES])
     }
 
     #[inline]
     pub fn is_all_zero(&self) -> bool {
-        self.0 == [0; SEARCH_BATCH_SIZE]
+        self.0 == [0; LANES]
     }
 
     #[inline]
     pub fn first_non_zero(&self) -> usize {
-        #[inline]
-        fn zeros(u: u128) -> usize {
-            if cfg!(target_endian = "little") {
-                u.trailing_zeros() as usize
-            } else {
-                u.leading_zeros() as usize
-            }
-        }
-
-        let hi: [u8; 16] = self.0[..16].try_into().unwrap();
-        let lo: [u8; 16] = self.0[16..].try_into().unwrap();
-        let hi = u128::from_ne_bytes(hi);
-        let lo = u128::from_ne_bytes(lo);
-        // TODO: Try to remove this branch
-        if hi != 0 {
-            zeros(hi) / 8
+        let u = u128::from_ne_bytes(self.0);
+        if cfg!(target_endian = "little") {
+            u.trailing_zeros() as usize / 8
         } else {
-            zeros(lo) / 8 + 16
+            u.leading_zeros() as usize / 8
         }
     }
 }
+
+macro_rules! repeat_twice {
+    ($body:block) => { $body $body }
+}
+pub(crate) use repeat_twice;
 
 /// Byte matcher lookup table.
 ///
@@ -569,40 +564,46 @@ macro_rules! byte_search {
                         }
                     } else {
                         // Matching is simple enough that we can use calculation to match bytes,
-                        // instead of table lookup. Compiler will turn this loop into a few
+                        // instead of table lookup. Compiler will turn the `for` loop into a few
                         // SIMD instructions to search whole batch in one go.
-                        // SAFETY: `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above ensures
-                        // there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
-                        let batch = unsafe { $pos.read_batch() };
-                        let mut matches = crate::lexer::search::AlignedBytes::new();
-                        for i in 0..batch.len() {
-                            matches.0[i] = ($table.matches(batch[i]) as u8) * 0xFF;
-                        }
+                        // TODO: Try doing this with a loop instead
+                        crate::lexer::search::repeat_twice! {{
+                            // SAFETY: `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above
+                            // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
+                            // We read 32 bytes in 2 x 16 blocks.
+                            let batch = unsafe { $pos.read16() };
+                            let mut matches = crate::lexer::search::AlignedBytes::new();
+                            debug_assert_eq!(batch.len(), matches.0.len());
+                            debug_assert_eq!(batch.len() * 2, crate::lexer::search::SEARCH_BATCH_SIZE);
+                            for i in 0..batch.len() {
+                                matches.0[i] = ($table.matches(batch[i]) as u8) * 0xFF;
+                            }
 
-                        if !matches.is_all_zero() {
-                            // Found a match in batch. Locate it.
-                            // Explicit SIMD "movemask" instruction would be better here, but this is
-                            // as close as we can get without explicit SIMD.
-                            // Still faster than byte-by-byte search.
-                            let match_index = matches.first_non_zero();
+                            if !matches.is_all_zero() {
+                                // Found a match in batch. Locate it.
+                                // Explicit SIMD "movemask" instruction would be better here, but this is
+                                // as close as we can get without explicit SIMD.
+                                // Still faster than byte-by-byte search.
+                                let match_index = matches.first_non_zero();
 
-                            // Advance `$pos` to position of match, and read the matching byte.
-                            // SAFETY: `match_index` is < `SEARCH_BATCH_SIZE` and there are at least
-                            // `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`, so safe to
-                            // advance by `match_index` bytes and read that byte.
+                                // Advance `$pos` to position of match, and read the matching byte.
+                                // SAFETY: `match_index` is < 16 and there are at least 16 bytes
+                                // remaining in `lexer.source`, so safe to advance by `match_index`
+                                // bytes and read that byte.
+                                // Also see above about UTF-8 character boundaries invariant.
+                                let byte = unsafe {
+                                    $pos = $pos.add(match_index);
+                                    $pos.read()
+                                };
+                                break 'inner byte;
+                            }
+
+                            // Found no match in batch.
+                            // Advance `$pos` to after end of batch, and continue searching.
+                            // SAFETY: There are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
                             // Also see above about UTF-8 character boundaries invariant.
-                            let byte = unsafe {
-                                $pos = $pos.add(match_index);
-                                $pos.read()
-                            };
-                            break 'inner byte;
-                        }
-
-                        // Found no match in batch.
-                        // Advance `$pos` to after end of batch, and continue searching.
-                        // SAFETY: There are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
-                        // Also see above about UTF-8 character boundaries invariant.
-                        unsafe { $pos = $pos.add(crate::lexer::search::SEARCH_BATCH_SIZE) };
+                            unsafe { $pos = $pos.add(batch.len()) };
+                        }}
                     }
 
                     // No match in batch - search next batch

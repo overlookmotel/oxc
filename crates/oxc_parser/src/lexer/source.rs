@@ -566,15 +566,15 @@ impl<'a> SourcePosition<'a> {
         *p.as_ref().unwrap_unchecked()
     }
 
-    /// Read `SEARCH_BATCH_SIZE` bytes from this `SourcePosition`.
+    /// Read 16 bytes from this `SourcePosition`.
     ///
     /// # SAFETY
-    /// Caller must ensure `SourcePosition` is no later than `SEARCH_BATCH_SIZE` bytes before end of
-    /// source text. i.e. at least `SEARCH_BATCH_SIZE` remaining before EOF.
+    /// Caller must ensure `SourcePosition` is no later than 16 bytes before end of source text.
+    /// i.e. if source length is 46, `self` must be on position 30 max.
     #[inline]
-    pub(super) unsafe fn read_batch(self) -> &'a [u8; SEARCH_BATCH_SIZE] {
+    pub(super) unsafe fn read16(self) -> &'a [u8; 16] {
         // SAFETY:
-        // Caller guarantees `self` is not at no later than `SEARCH_BATCH_SIZE` bytes before end of source text.
+        // Caller guarantees `self` is not at no later than 16 bytes before end of source text.
         // `Source` is created from a valid `&str`, so points to allocated, initialized memory.
         // `Source` conceptually holds the source text `&str`, which guarantees to mutable references
         // to the same memory can exist, as that would violate Rust's aliasing rules.
@@ -582,7 +582,7 @@ impl<'a> SourcePosition<'a> {
         // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
         debug_assert!(!self.ptr.is_null());
         #[allow(clippy::ptr_as_ptr)]
-        let p = self.ptr as *const [u8; SEARCH_BATCH_SIZE];
+        let p = self.ptr as *const [u8; 16];
         p.as_ref().unwrap_unchecked()
     }
 }
