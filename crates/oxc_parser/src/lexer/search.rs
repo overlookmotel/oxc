@@ -4,13 +4,14 @@
 //! * `byte_match_table!` and `safe_byte_match_table!` macros create those tables at compile time.
 //! * `byte_search!` macro searches source text for first byte matching a byte table.
 
-use oxc_index::const_assert_eq;
+use oxc_index::{const_assert, const_assert_eq};
 
 /// SIMD lane width
 pub const LANES: usize = 16;
 
 /// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
+const_assert!(SEARCH_BATCH_SIZE >= LANES);
 const_assert_eq!(SEARCH_BATCH_SIZE % LANES, 0);
 
 /// Aligned batch of 16 bytes
@@ -569,7 +570,7 @@ macro_rules! byte_search {
                             // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`
                             // at start of this loop. Reading in `SEARCH_BATCH_SIZE / LANES` x blocks
                             // of `LANES` bytes, so reading cannot go out of bounds.
-                            let batch = unsafe { $pos.read16() };
+                            let batch = unsafe { $pos.read_slice::<LANES>() };
                             let mut matches = AlignedBytes::new();
                             debug_assert_eq!(batch.len(), matches.0.len());
                             debug_assert_eq!(batch.len(), LANES);
