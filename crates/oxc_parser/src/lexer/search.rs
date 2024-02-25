@@ -42,17 +42,17 @@ pub const SEARCH_BATCH_SIZE: usize = 32;
 /// ```
 // TODO: Delete this type + `byte_match_table!` macro if not used
 #[repr(C, align(32))]
-pub struct ByteMatchTable([u8; 32]);
+pub struct ByteMatchTable([u32; 8]);
 
 #[allow(dead_code)]
 impl ByteMatchTable {
     // Create new `ByteMatchTable`.
     pub const fn new(bytes: [bool; 256]) -> Self {
-        let mut table = Self([0; 32]);
+        let mut table = Self([0; 8]);
         let mut i = 0u8;
         loop {
             if bytes[i as usize] {
-                table.0[i as usize / 8] |= 1 << (i % 8);
+                table.0[i as usize / 32] |= 1 << (i % 32);
             }
             if i == 255 {
                 break;
@@ -73,7 +73,7 @@ impl ByteMatchTable {
     /// Test a value against this `ByteMatchTable`.
     #[inline]
     pub const fn matches(&self, b: u8) -> bool {
-        self.0[b as usize / 8] & (1 << (b % 8)) != 0
+        self.0[b as usize / 32] & (1 << (b % 32)) != 0
     }
 }
 
@@ -167,12 +167,12 @@ pub(crate) use byte_match_table;
 /// }
 /// ```
 #[repr(C, align(32))]
-pub struct SafeByteMatchTable([u8; 32]);
+pub struct SafeByteMatchTable([u32; 8]);
 
 impl SafeByteMatchTable {
     // Create new `SafeByteMatchTable`.
     pub const fn new(bytes: [bool; 256]) -> Self {
-        let mut table = Self([0; 32]);
+        let mut table = Self([0; 8]);
 
         // Check if contains either:
         // 1. `true` for all byte values 192..248
@@ -184,7 +184,7 @@ impl SafeByteMatchTable {
         loop {
             let matches = bytes[i as usize];
             if matches {
-                table.0[i as usize / 8] |= 1 << (i % 8);
+                table.0[i as usize / 32] |= 1 << (i % 32);
             }
 
             if matches {
@@ -220,7 +220,7 @@ impl SafeByteMatchTable {
     /// Test a value against this `SafeByteMatchTable`.
     #[inline]
     pub const fn matches(&self, b: u8) -> bool {
-        self.0[b as usize / 8] & (1 << (b % 8)) != 0
+        self.0[b as usize / 32] & (1 << (b % 32)) != 0
     }
 }
 
