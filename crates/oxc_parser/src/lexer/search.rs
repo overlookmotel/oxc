@@ -15,6 +15,9 @@ pub const SEARCH_BATCH_SIZE: usize = 32;
 ///
 /// If the match pattern satisfies constraints of `SafeByteMatchTable`, use that instead.
 ///
+/// Table is stored as a compressed bitset, with 1 bit representing match/no match for
+/// each possible byte value.
+///
 /// # Examples
 /// ```
 /// use crate::lexer::search::{ByteMatchTable, byte_match_table};
@@ -38,21 +41,23 @@ pub const SEARCH_BATCH_SIZE: usize = 32;
 /// }
 /// ```
 // TODO: Delete this type + `byte_match_table!` macro if not used
-#[repr(C, align(64))]
-pub struct ByteMatchTable([bool; 256]);
+#[repr(C, align(32))]
+pub struct ByteMatchTable([u8; 32]);
 
 #[allow(dead_code)]
 impl ByteMatchTable {
     // Create new `ByteMatchTable`.
     pub const fn new(bytes: [bool; 256]) -> Self {
-        let mut table = Self([false; 256]);
-        let mut i = 0;
+        let mut table = Self([0; 32]);
+        let mut i = 0u8;
         loop {
-            table.0[i] = bytes[i];
-            i += 1;
-            if i == 256 {
+            if bytes[i as usize] {
+                table.0[i as usize / 8] |= 1 << (i % 8);
+            }
+            if i == 255 {
                 break;
             }
+            i += 1;
         }
         table
     }
@@ -68,7 +73,7 @@ impl ByteMatchTable {
     /// Test a value against this `ByteMatchTable`.
     #[inline]
     pub const fn matches(&self, b: u8) -> bool {
-        self.0[b as usize]
+        self.0[b as usize / 8] & (1 << (b % 8)) != 0
     }
 }
 
@@ -138,6 +143,9 @@ pub(crate) use byte_match_table;
 /// This is statically checked by `SafeByteMatchTable::new`, and will fail to compile if match
 /// pattern does not satisfy one of the above.
 ///
+/// Table is stored as a compressed bitset, with 1 bit representing match/no match for
+/// each possible byte value.
+///
 /// # Examples
 /// ```
 /// use crate::lexer::search::{SafeByteMatchTable, safe_byte_match_table};
@@ -158,13 +166,13 @@ pub(crate) use byte_match_table;
 ///   }
 /// }
 /// ```
-#[repr(C, align(64))]
-pub struct SafeByteMatchTable([bool; 256]);
+#[repr(C, align(32))]
+pub struct SafeByteMatchTable([u8; 32]);
 
 impl SafeByteMatchTable {
     // Create new `SafeByteMatchTable`.
     pub const fn new(bytes: [bool; 256]) -> Self {
-        let mut table = Self([false; 256]);
+        let mut table = Self([0; 32]);
 
         // Check if contains either:
         // 1. `true` for all byte values 192..248
@@ -172,10 +180,12 @@ impl SafeByteMatchTable {
         let mut unicode_start_all_match = true;
         let mut unicode_cont_all_no_match = true;
 
-        let mut i = 0;
+        let mut i = 0u8;
         loop {
-            let matches = bytes[i];
-            table.0[i] = matches;
+            let matches = bytes[i as usize];
+            if matches {
+                table.0[i as usize / 8] |= 1 << (i % 8);
+            }
 
             if matches {
                 if i >= 128 && i < 192 {
@@ -185,10 +195,10 @@ impl SafeByteMatchTable {
                 unicode_start_all_match = false;
             }
 
-            i += 1;
-            if i == 256 {
+            if i == 255 {
                 break;
             }
+            i += 1;
         }
 
         assert!(
@@ -210,7 +220,7 @@ impl SafeByteMatchTable {
     /// Test a value against this `SafeByteMatchTable`.
     #[inline]
     pub const fn matches(&self, b: u8) -> bool {
-        self.0[b as usize]
+        self.0[b as usize / 8] & (1 << (b % 8)) != 0
     }
 }
 
