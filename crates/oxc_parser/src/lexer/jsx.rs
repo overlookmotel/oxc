@@ -21,9 +21,9 @@ impl<'a> Lexer<'a> {
     /// * `delimiter` must be an ASCII character.
     /// * Next char in `lexer.source` must be ASCII.
     pub(super) unsafe fn read_jsx_string_literal(&mut self, delimiter: u8) -> Kind {
-        // Skip opening quote.
-        // SAFETY: Caller guarantees next byte is ASCII, so safe to advance past it.
+        // Skip opening quote
         debug_assert!(delimiter.is_ascii());
+        // SAFETY: Caller guarantees next byte is ASCII, so `.add(1)` is a UTF-8 char boundary
         let after_opening_quote = self.source.position().add(1);
         let remaining = self.source.str_from_pos_to_end(after_opening_quote);
 
