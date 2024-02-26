@@ -177,7 +177,7 @@ impl<'a> Lexer<'a> {
             self.source.next_byte_unchecked();
             self.read_jsx_string_literal('\'')
         } else {
-            // SAFETY: Caller guarantees next char is `"`, which is ASCII.
+            // SAFETY: Caller guarantees next char is `'`, which is ASCII.
             // b'\'' is an ASCII byte. `SINGLE_QUOTE_STRING_END_TABLE` is a `SafeByteMatchTable`.
             unsafe { handle_string_literal!(self, b'\'', SINGLE_QUOTE_STRING_END_TABLE) }
         }
