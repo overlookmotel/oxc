@@ -158,9 +158,8 @@ impl<'a> Lexer<'a> {
     /// Next character must be `"`.
     pub(super) unsafe fn read_string_literal_double_quote(&mut self) -> Kind {
         if self.context == LexerContext::JsxAttributeValue {
-            // SAFETY: Caller guarantees next char is `"`
-            self.source.next_byte_unchecked();
-            self.read_jsx_string_literal('"')
+            // SAFETY: Caller guarantees next char is `"`, which is ASCII
+            self.read_jsx_string_literal(b'"')
         } else {
             // SAFETY: Caller guarantees next char is `"`, which is ASCII.
             // b'"' is an ASCII byte. `DOUBLE_QUOTE_STRING_END_TABLE` is a `SafeByteMatchTable`.
@@ -173,9 +172,8 @@ impl<'a> Lexer<'a> {
     /// Next character must be `'`.
     pub(super) unsafe fn read_string_literal_single_quote(&mut self) -> Kind {
         if self.context == LexerContext::JsxAttributeValue {
-            // SAFETY: Caller guarantees next char is `'`
-            self.source.next_byte_unchecked();
-            self.read_jsx_string_literal('\'')
+            // SAFETY: Caller guarantees next char is `'`, which is ASCII
+            self.read_jsx_string_literal(b'\'')
         } else {
             // SAFETY: Caller guarantees next char is `'`, which is ASCII.
             // b'\'' is an ASCII byte. `SINGLE_QUOTE_STRING_END_TABLE` is a `SafeByteMatchTable`.
