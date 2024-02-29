@@ -479,11 +479,11 @@ macro_rules! byte_search {
 
         let mut $pos = $start;
         #[allow(unused_unsafe)] // Silence warnings if macro called in unsafe code
-        loop {
+        let $match_byte = loop {
             // Important to keep complex logic of `$should_continue` and `$match_handler` outside
             // outside the `for` loop for batch search. Keeping it as minimal as possible encourages
             // compiler to unroll it.
-            let $match_byte = 'inner: loop {
+            let $continue_byte = 'inner: loop {
                 if $pos.addr() <= $lexer.source.end_for_batch_search_addr() {
                     // Search a batch of `SEARCH_BATCH_SIZE` bytes.
                     //
@@ -530,24 +530,24 @@ macro_rules! byte_search {
             };
 
             // Found match. Check if should continue.
-            {
-                let $continue_byte = $match_byte;
-                if $should_continue {
-                    // Not a match after all - continue searching.
-                    // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
-                    // See above about UTF-8 character boundaries invariant.
-                    $pos = unsafe { $pos.add(1) };
-                    continue;
-                }
+            if $should_continue {
+                // Not a match after all - continue searching.
+                // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
+                // See above about UTF-8 character boundaries invariant.
+                $pos = unsafe { $pos.add(1) };
+                continue;
             }
 
-            // Advance `lexer.source`'s position up to `$pos`, consuming unmatched bytes.
-            // SAFETY: See above about UTF-8 character boundaries invariant.
-            $lexer.source.set_position($pos);
+            // Match confirmed
+            break $continue_byte;
+        };
 
-            let $match_start = $start;
-            return $match_handler;
-        }
+        // Advance `lexer.source`'s position up to `$pos`, consuming unmatched bytes.
+        // SAFETY: See above about UTF-8 character boundaries invariant.
+        $lexer.source.set_position($pos);
+
+        let $match_start = $start;
+        return $match_handler;
     }};
 }
 pub(crate) use byte_search;

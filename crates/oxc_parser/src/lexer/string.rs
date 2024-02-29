@@ -112,7 +112,7 @@ macro_rules! handle_string_literal_escape {
                         // `Source`'s invariant temporarily, but the guarantees of `SafeByteMatchTable`
                         // mean `!table.matches(b)` on this branch prevents exiting this loop until
                         // `source` is positioned on a UTF-8 character boundary again.
-                        unsafe { $lexer.source.next_byte_unchecked() };
+                        $lexer.source.next_byte_unchecked();
                         continue;
                     }
                     b if b == $delimiter => {
