@@ -512,26 +512,26 @@ macro_rules! byte_search {
             } else {
                 // Not enough bytes remaining to process as a batch
                 let end_addr = $lexer.source.end_addr();
-                loop {
-                    if $pos.addr() == end_addr {
-                        // EOF.
-                        // Advance `lexer.source`'s position to end of file.
-                        $lexer.source.set_position($pos);
+                'inner: loop {
+                    while $pos.addr() < end_addr {
+                        // SAFETY: `pos` is not at end of source, so safe to read a byte
+                        let byte = unsafe { $pos.read() };
+                        if $table.matches(byte) {
+                            break 'inner byte;
+                        }
 
-                        let $eof_start = $start;
-                        return $eof_handler;
+                        // No match - continue searching
+                        // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
+                        // See above about UTF-8 character boundaries invariant.
+                        $pos = unsafe { $pos.add(1) };
                     }
 
-                    // SAFETY: `pos` is not at end of source, so safe to read a byte
-                    let byte = unsafe { $pos.read() };
-                    if $table.matches(byte) {
-                        break byte;
-                    }
+                    // EOF.
+                    // Advance `lexer.source`'s position to end of file.
+                    $lexer.source.set_position($pos);
 
-                    // No match - continue searching
-                    // SAFETY: `pos` is not at end of source, so safe to advance 1 byte.
-                    // See above about UTF-8 character boundaries invariant.
-                    $pos = unsafe { $pos.add(1) };
+                    let $eof_start = $start;
+                    return $eof_handler;
                 }
             };
 
