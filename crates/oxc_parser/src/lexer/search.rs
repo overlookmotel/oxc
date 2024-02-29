@@ -4,13 +4,8 @@
 //! * `byte_match_table!` and `safe_byte_match_table!` macros create those tables at compile time.
 //! * `byte_search!` macro searches source text for first byte matching a byte table.
 
-use oxc_index::const_assert;
-
-/// Batch + block sizes for searching
+/// Batch size for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
-pub const SEARCH_BLOCK_SIZE: usize = 16;
-const_assert!(SEARCH_BLOCK_SIZE <= SEARCH_BATCH_SIZE);
-const_assert!(SEARCH_BATCH_SIZE % SEARCH_BLOCK_SIZE == 0);
 
 /// Byte matcher lookup table.
 ///
@@ -493,28 +488,26 @@ macro_rules! byte_search {
                 // This allows complex logic of `$should_continue` and `$match_handler` to be
                 // outside the `for` loop, keeping it as minimal as possible, to encourage
                 // compiler to unroll it.
+                //
+                // SAFETY:
+                // `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above ensures
+                // there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
+                // So calls to `$pos.read()` and `$pos.add(1)` in this loop cannot go out of bounds.
                 'inner: loop {
-                    use crate::lexer::search::{SEARCH_BATCH_SIZE, SEARCH_BLOCK_SIZE};
-                    // SAFETY: `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above
-                    // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
-                    // `$pos` cannot go out of bounds in this loop.
-                    // Read in blocks of `SEARCH_BLOCK_SIZE`, as this loads a block into a register.
-                    unsafe {
-                        for _ in 0..SEARCH_BATCH_SIZE / SEARCH_BLOCK_SIZE {
-                            let bytes = $pos.read_slice::<SEARCH_BLOCK_SIZE>();
-                            for i in 0..SEARCH_BLOCK_SIZE {
-                                let byte = bytes[i];
-                                if $table.matches(byte) {
-                                    $pos = $pos.add(i);
-                                    break 'inner byte;
-                                }
-                            }
-                            $pos = $pos.add(SEARCH_BLOCK_SIZE);
+                    for _i in 0..crate::lexer::search::SEARCH_BATCH_SIZE {
+                        // SAFETY: `$pos` cannot go out of bounds in this loop (see above)
+                        let byte = unsafe { $pos.read() };
+                        if $table.matches(byte) {
+                            break 'inner byte;
                         }
 
-                        // No match in batch - search next batch
-                        continue 'outer;
+                        // No match - continue searching batch.
+                        // SAFETY: `$pos` cannot go out of bounds in this loop (see above).
+                        // Also see above about UTF-8 character boundaries invariant.
+                        $pos = unsafe { $pos.add(1) };
                     }
+                    // No match in batch - search next batch
+                    continue 'outer;
                 }
             } else {
                 // Not enough bytes remaining for a batch. Process byte-by-byte.
