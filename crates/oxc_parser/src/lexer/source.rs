@@ -587,17 +587,8 @@ impl<'a> SourcePosition<'a> {
     /// i.e. if source length is 10, `self` must be on position 8 max.
     #[inline]
     pub(super) unsafe fn read2(self) -> [u8; 2] {
-        // SAFETY:
-        // Caller guarantees `self` is not at no later than 2 bytes before end of source text.
-        // `Source` is created from a valid `&str`, so points to allocated, initialized memory.
-        // `Source` conceptually holds the source text `&str`, which guarantees to mutable references
-        // to the same memory can exist, as that would violate Rust's aliasing rules.
-        // Pointer is "dereferenceable" by definition as a `u8` is 1 byte and cannot span multiple objects.
-        // Alignment is not relevant as `u8` is aligned on 1 (i.e. no alignment requirements).
-        debug_assert!(!self.ptr.is_null());
-        #[allow(clippy::ptr_as_ptr)]
-        let p = self.ptr as *const [u8; 2];
-        *p.as_ref().unwrap_unchecked()
+        // SAFETY: Caller guarantees `self` is no later than 2 bytes before end of source text
+        self.read_array::<2>()
     }
 
     /// Read `N` bytes from this `SourcePosition`.
@@ -606,7 +597,7 @@ impl<'a> SourcePosition<'a> {
     /// Caller must ensure `SourcePosition` is no later than `N` bytes before end of source text.
     /// i.e. if source length is 72 and `N` is 32, `self` must be on position 40 max.
     #[inline]
-    pub(super) unsafe fn read_slice<const N: usize>(self) -> &'a [u8; N] {
+    pub(super) unsafe fn read_array<const N: usize>(self) -> [u8; N] {
         // SAFETY:
         // Caller guarantees `self` is not at no later than 2 bytes before end of source text.
         // `Source` is created from a valid `&str`, so points to allocated, initialized memory.
@@ -617,7 +608,7 @@ impl<'a> SourcePosition<'a> {
         debug_assert!(!self.ptr.is_null());
         #[allow(clippy::ptr_as_ptr)]
         let p = self.ptr as *const [u8; N];
-        p.as_ref().unwrap_unchecked()
+        *p.as_ref().unwrap_unchecked()
     }
 }
 

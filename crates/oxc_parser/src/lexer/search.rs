@@ -494,9 +494,9 @@ macro_rules! byte_search {
                     // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
                     // `$pos` cannot go out of bounds in this loop.
                     unsafe {
-                        let slice = $pos.read_slice::<SEARCH_BATCH_SIZE>();
+                        let bytes = $pos.read_array::<SEARCH_BATCH_SIZE>();
                         for i in 0..SEARCH_BATCH_SIZE {
-                            let byte = slice[i];
+                            let byte = bytes[i];
                             if $table.matches(byte) {
                                 $pos = $pos.add(i);
                                 break 'inner byte;
