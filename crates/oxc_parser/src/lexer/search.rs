@@ -501,7 +501,7 @@ macro_rules! byte_search {
                     // Read in blocks of `SEARCH_BLOCK_SIZE`, as this loads a block into a register.
                     unsafe {
                         for _ in 0..SEARCH_BATCH_SIZE / SEARCH_BLOCK_SIZE {
-                            let bytes = $pos.read_array::<SEARCH_BLOCK_SIZE>();
+                            let bytes = $pos.read_slice::<SEARCH_BLOCK_SIZE>();
                             for i in 0..SEARCH_BLOCK_SIZE {
                                 let byte = bytes[i];
                                 if $table.matches(byte) {
