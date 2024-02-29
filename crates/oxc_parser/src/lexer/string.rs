@@ -106,6 +106,7 @@ macro_rules! handle_string_literal_escape {
             let chunk_start = $lexer.source.position();
             while let Some(b) = $lexer.source.peek_byte() {
                 match b {
+                    #[allow(unused_unsafe)] // Clippy flags this if macro used in unsafe function
                     b if !$table.matches(b) => {
                         // SAFETY: A byte is available, as we just peeked it.
                         // This may put `source`'s position on a UTF-8 continuation byte, which violates
