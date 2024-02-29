@@ -4,8 +4,13 @@
 //! * `byte_match_table!` and `safe_byte_match_table!` macros create those tables at compile time.
 //! * `byte_search!` macro searches source text for first byte matching a byte table.
 
-/// Batch size for searching
+use oxc_index::const_assert;
+
+/// Batch + block sizes for searching
 pub const SEARCH_BATCH_SIZE: usize = 32;
+pub const SEARCH_BLOCK_SIZE: usize = 16;
+const_assert!(SEARCH_BLOCK_SIZE <= SEARCH_BATCH_SIZE);
+const_assert!(SEARCH_BATCH_SIZE % SEARCH_BLOCK_SIZE == 0);
 
 /// Byte matcher lookup table.
 ///
@@ -489,21 +494,25 @@ macro_rules! byte_search {
                 // outside the `for` loop, keeping it as minimal as possible, to encourage
                 // compiler to unroll it.
                 'inner: loop {
-                    use crate::lexer::search::SEARCH_BATCH_SIZE;
+                    use crate::lexer::search::{SEARCH_BATCH_SIZE, SEARCH_BLOCK_SIZE};
                     // SAFETY: `$pos.addr() <= lexer.source.end_for_batch_search_addr()` check above
                     // ensures there are at least `SEARCH_BATCH_SIZE` bytes remaining in `lexer.source`.
                     // `$pos` cannot go out of bounds in this loop.
+                    // Read in blocks of `SEARCH_BLOCK_SIZE`, as this loads a block into a register.
                     unsafe {
-                        let bytes = $pos.read_array::<SEARCH_BATCH_SIZE>();
-                        for i in 0..SEARCH_BATCH_SIZE {
-                            let byte = bytes[i];
-                            if $table.matches(byte) {
-                                $pos = $pos.add(i);
-                                break 'inner byte;
+                        for _ in 0..SEARCH_BATCH_SIZE / SEARCH_BLOCK_SIZE {
+                            let bytes = $pos.read_array::<SEARCH_BLOCK_SIZE>();
+                            for i in 0..SEARCH_BLOCK_SIZE {
+                                let byte = bytes[i];
+                                if $table.matches(byte) {
+                                    $pos = $pos.add(i);
+                                    break 'inner byte;
+                                }
                             }
+                            $pos = $pos.add(SEARCH_BLOCK_SIZE);
                         }
+
                         // No match in batch - search next batch
-                        $pos = $pos.add(SEARCH_BATCH_SIZE);
                         continue 'outer;
                     }
                 }
