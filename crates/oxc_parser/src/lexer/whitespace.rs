@@ -1,10 +1,23 @@
-use super::{
-    search::{byte_search, safe_byte_match_table, SafeByteMatchTable},
-    Kind, Lexer,
-};
+use super::{search::byte_search, Kind, Lexer};
 
-static NOT_REGULAR_WHITESPACE_OR_LINE_BREAK_TABLE: SafeByteMatchTable =
-    safe_byte_match_table!(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'));
+struct NotWhitespaceMatcher;
+impl NotWhitespaceMatcher {
+    #[allow(clippy::unused_self)]
+    #[inline]
+    pub const fn use_table(&self) {}
+
+    #[allow(clippy::unused_self)]
+    #[inline]
+    pub const fn is_table(&self) -> bool {
+        false
+    }
+
+    #[allow(clippy::unused_self)]
+    #[inline]
+    pub const fn matches(&self, b: u8) -> bool {
+        !matches!(b, b' ' | b'\t')
+    }
+}
 
 impl<'a> Lexer<'a> {
     pub(super) fn line_break_handler(&mut self) -> Kind {
@@ -16,7 +29,12 @@ impl<'a> Lexer<'a> {
         // They're uncommon, so leave them for the next call to `handle_byte` to take care of.
         byte_search! {
             lexer: self,
-            table: NOT_REGULAR_WHITESPACE_OR_LINE_BREAK_TABLE,
+            table: NotWhitespaceMatcher,
+            continue_if: |matched_byte, _pos| {
+                // TODO: Branchlessly consume a following `\n`.
+                // Common after `\r`, and double line breaks are also not so rare.
+                matches!(matched_byte, b'\r' | b'\n')
+            },
             handle_match: |_next_byte, _start| {
                 Kind::Skip
             },
