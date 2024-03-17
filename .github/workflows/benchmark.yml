@@ -69,6 +69,7 @@ jobs:
         working-directory: ./tasks/benchmark/codspeed
         env:
           COMPONENT: ${{ matrix.component }}
+          FIXTURE: ${{ matrix.fixture }}
         run: |
           corepack enable
           pnpm install
