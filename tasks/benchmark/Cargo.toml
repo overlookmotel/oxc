@@ -53,26 +53,17 @@ harness = false
 
 [dependencies]
 oxc_allocator    = { workspace = true }
-oxc_linter       = { workspace = true, optional = true }
-oxc_minifier     = { workspace = true, optional = true }
-oxc_parser       = { workspace = true, features = ["benchmarking"], optional = true }
-oxc_prettier     = { workspace = true, optional = true }
-oxc_semantic     = { workspace = true, optional = true }
+oxc_linter       = { workspace = true }
+oxc_minifier     = { workspace = true }
+oxc_parser       = { workspace = true, features = ["benchmarking"] }
+oxc_prettier     = { workspace = true }
+oxc_semantic     = { workspace = true }
 oxc_span         = { workspace = true }
 oxc_tasks_common = { workspace = true }
-oxc_transformer  = { workspace = true, optional = true }
-oxc_codegen      = { workspace = true, optional = true }
+oxc_transformer  = { workspace = true }
+oxc_codegen      = { workspace = true }
 
 criterion = { package = "criterion2", version = "0.6.0", default-features = false }
 
 [features]
-default           = ["lexer", "parser", "transformer", "semantic", "linter", "codegen_sourcemap", "minifier", "prettier"]
-lexer             = ["dep:oxc_parser"]
-parser            = ["dep:oxc_parser"]
-transformer       = ["dep:oxc_transformer", "dep:oxc_parser", "dep:oxc_semantic"]
-semantic          = ["dep:oxc_semantic", "dep:oxc_parser"]
-linter            = ["dep:oxc_linter", "dep:oxc_parser", "dep:oxc_semantic"]
-codegen_sourcemap = ["dep:oxc_codegen", "dep:oxc_parser"]
-minifier          = ["dep:oxc_minifier", "dep:oxc_parser"]
-prettier          = ["dep:oxc_prettier", "dep:oxc_parser"]
-codspeed          = ["criterion/codspeed"]
+codspeed = ["criterion/codspeed"]

@@ -68,7 +68,7 @@ jobs:
           RUSTFLAGS: "-C debuginfo=2 -C strip=none -g --cfg codspeed"
         shell: bash
         run: |
-          cargo build --release -p oxc_benchmark --no-default-features --features codspeed --features ${{ matrix.component }} --bench ${{ matrix.component }}
+          cargo build --release -p oxc_benchmark --features codspeed --bench ${{ matrix.component }}
           mkdir -p target/codspeed/oxc_benchmark/
           mv target/release/deps/${{ matrix.component }}-* target/codspeed/oxc_benchmark
           rm -rf target/codspeed/oxc_benchmark/*.d
