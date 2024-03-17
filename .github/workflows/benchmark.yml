@@ -100,7 +100,7 @@ jobs:
       - name: Upload bench data artefact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.component }}
+          name: ${{ matrix.component }}${{ matrix.fixture }}
           path: ${{ env.DATA_DIR }}
           if-no-files-found: error
           retention-days: 1
