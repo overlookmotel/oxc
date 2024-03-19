@@ -31,7 +31,7 @@ jobs:
       matrix:
         # Run each benchmark in own job.
         # Linter benchmark is by far the slowest, so split each fixture into own job.
-        component: [lexer, parser, transformer, semantic, minifier, codegen_sourcemap]
+        component: [lexer, parser, transformer, semantic, minifier, codegen_sourcemap, parser_napi]
         include:
           - component: linter
             fixture: 0
@@ -77,12 +77,27 @@ jobs:
           pnpm install
           node capture.mjs &
 
+      - name: Build NAPI Benchmark
+        if: ${{ matrix.component == 'parser_napi'}}
+        working-directory: ./napi/parser
+        run: |
+          corepack enable
+          pnpm install
+          pnpm build
+
+      - name: Run NAPI Benchmark
+        if: ${{ matrix.component == 'parser_napi'}}
+        working-directory: ./napi/parser
+        run: node parse.bench.mjs
+
       - name: Build Benchmark
         env:
           RUSTFLAGS: "-C debuginfo=2 -C strip=none -g --cfg codspeed"
         shell: bash
         run: |
-          cargo build --release -p oxc_benchmark --features codspeed --bench ${{ matrix.component }}
+          cargo build --release -p oxc_benchmark --features codspeed \
+            ${{ matrix.component == 'parser_napi' ? '--features serde' : ''}} \
+            --bench ${{ matrix.component }}
           mkdir -p target/codspeed/oxc_benchmark/
           mv target/release/deps/${{ matrix.component }}-* target/codspeed/oxc_benchmark
           rm -rf target/codspeed/oxc_benchmark/*.d
