@@ -34,7 +34,9 @@ fn bench_parser_napi(criterion: &mut Criterion) {
         println!("intended duration: {} = {:?}", &file.filename, duration);
         let mut iterations = 0;
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
-            b.iter(|| {});
+            b.iter(|| {
+                iterations += 1;
+            });
         });
         println!("iterations for {}: {}", &file.filename, iterations);
     }
