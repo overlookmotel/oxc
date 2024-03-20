@@ -35,12 +35,15 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     for file in files {
         let duration = Duration::from_secs_f64(file.duration);
         println!("intended duration: {} = {:?}", &file.filename, duration);
+        let mut iterations = 0;
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
             b.iter(|| {
                 let start = Instant::now();
+                iterations += 1;
                 while start.elapsed() < duration {}
             });
         });
+        println!("iterations for {}: {}", &file.filename, iterations);
     }
     group.finish();
 }
