@@ -100,7 +100,7 @@ jobs:
         shell: bash
         run: |
           cargo build --release -p oxc_benchmark --features codspeed \
-            ${{ matrix.component == 'parser_napi' ? '--features serde' : ''}} \
+            ${{ matrix.component == 'parser_napi' && '--features serde' || ''}} \
             --bench ${{ matrix.component }}
           mkdir -p target/codspeed/oxc_benchmark/
           mv target/release/deps/${{ matrix.component }}-* target/codspeed/oxc_benchmark
