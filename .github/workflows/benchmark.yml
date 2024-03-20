@@ -46,7 +46,7 @@ jobs:
       - name: Install Rust Toolchain
         uses: ./.github/actions/rustup
         with:
-          shared-key: 'benchmark'
+          shared-key: ${{ matrix.component == 'parser_napi' && 'benchmark_napi' || 'benchmark' }}
           save-cache: ${{ github.ref_name == 'main' }}
 
       - name: Install codspeed
