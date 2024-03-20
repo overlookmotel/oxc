@@ -53,12 +53,12 @@ app.put('/upload_archive', wrapHandler(async (req, res) => {
     await tar.extract({file: path, cwd: dataDir});
     await fs.rm(path);
 
-    // Rename `.out` files + delete `.log` files
+    // Rename `.out` + `.map` files, and delete `.log` files
     const filenames = await fs.readdir(dataDir);
     for (const filename of filenames) {
         if (filename.endsWith('.log')) {
             await fs.rm(pathJoin(dataDir, filename));
-        } else if (filename.endsWith('.out')) {
+        } else if (!filename.endsWith('.json')) {
             await fs.rename(pathJoin(dataDir, filename), getFilePath(filename));
         }
     }

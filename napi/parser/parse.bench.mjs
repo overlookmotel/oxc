@@ -19,7 +19,7 @@ const urls = [
     'https://cdn.jsdelivr.net/npm/antd@5.12.5/dist/antd.js',
 ];
 
-urls.length = 1;
+urls.length = 2;
 
 // Same directory as Rust benchmarks use for downloaded files
 const cacheDirPath = pathJoin(fileURLToPath(import.meta.url), '../../../target');

@@ -16,23 +16,38 @@ const METADATA_SUFFIX = '_metadata.json',
 const dataDir = process.env.DATA_DIR,
     token = process.env.CODSPEED_TOKEN;
 
-// Find profile files and first metadata file
-const profileFiles = [];
+// Find profile files and first metadata file.
+// Match `.out` and `.map` files to each other.
+const profiles = new Map();
 let metadataPath;
 for (const filename of await fs.readdir(dataDir)) {
     const path = pathJoin(dataDir, filename);
     if (filename.endsWith(METADATA_SUFFIX)) {
         if (!metadataPath) metadataPath = path;
     } else {
-        const match = filename.match(/_(\d+)\.out$/);
-        assert(match, `Unexpected file: ${filename}`);
+        let type;
+        let match = filename.match(/^(.*)_(\d+)\.out$/);
+        if (match) {
+            type = 'out';
+        } else {
+            match = filename.match(/^(.*)_perf-(\d+)\.map$/);
+            assert(match, `Unexpected file: ${filename}`);
+            type = 'map';
+        }
 
-        const pid = +match[1];
-        profileFiles.push({pid, path});
+        const component = match[1],
+            pid = +match[2],
+            key = `${component}_${pid}`;
+        let profile = profiles.get(key);
+        if (!profile) {
+            profile = {pid, outPath: null, mapPath: null};
+            profiles.set(key, profile);
+        }
+        profile[`${type}Path`] = path;
     }
 }
 
-// Move all `.out` files to one directory
+// Move all profile files to one directory
 console.log('Combining profiles');
 
 const outDir = pathJoin(dataDir, 'out');
@@ -41,32 +56,36 @@ await fs.mkdir(outDir);
 const pids = new Set(),
     duplicates = [];
 let highestPid = -1;
-for (const {pid, path} of profileFiles) {
+for (const {pid, outPath, mapPath} of profiles.values()) {
+    assert(outPath, `map file with no corresponding out file: ${mapPath}`);
+
     if (pids.has(pid)) {
         // Duplicate PID
-        duplicates.push({pid, path});
+        duplicates.push({pid, outPath, mapPath});
     } else {
         pids.add(pid);
         if (pid > highestPid) highestPid = pid;
-        await fs.rename(path, pathJoin(outDir, `${pid}.out`));
+        await fs.rename(outPath, pathJoin(outDir, `${pid}.out`));
+        if (mapPath) await fs.rename(mapPath, pathJoin(outDir, `perf-${pid}.map`));
     }
 }
 
-// Alter PIDs for `.out` files with duplicate filenames
-for (let {pid, path} of duplicates) {
-    let content = await fs.readFile(path, 'utf8');
+// Alter PIDs for profile files with duplicate PIDs
+for (let {pid, outPath, mapPath} of duplicates) {
+    let outContent = await fs.readFile(outPath, 'utf8');
 
     const pidLine = `\npid: ${pid}\n`;
-    const index = content.indexOf(pidLine);
-    assert(index !== -1, `Could not locate PID in ${path}`);
-    const before = content.slice(0, index);
-    assert(before.split('\n').length === 3, `Unexpected formatting in ${path}`);
+    const index = outContent.indexOf(pidLine);
+    assert(index !== -1, `Could not locate PID in ${outPath}`);
+    const before = outContent.slice(0, index);
+    assert(before.split('\n').length === 3, `Unexpected formatting in ${outPath}`);
 
     pid = ++highestPid;
-    content = `${before}\npid: ${pid}\n${content.slice(index + pidLine.length)}`;
+    outContent = `${before}\npid: ${pid}\n${outContent.slice(index + pidLine.length)}`;
 
-    await fs.writeFile(pathJoin(outDir, `${pid}.out`), content);
-    await fs.rm(path);
+    await fs.writeFile(pathJoin(outDir, `${pid}.out`), outContent);
+    await fs.rm(outPath);
+    if (mapPath) await fs.rename(mapPath, pathJoin(outDir, `perf-${pid}.map`));
 }
 
 // ZIP combined profile directory
