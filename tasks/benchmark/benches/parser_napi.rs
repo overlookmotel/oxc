@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oxc_benchmark::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use oxc_benchmark::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
 
 use serde::Deserialize;
 
@@ -32,6 +32,7 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     // Reduce time to run benchmark as much as possible (10 is min for sample size)
     group.sample_size(10);
     group.warm_up_time(Duration::from_micros(1));
+    group.sampling_mode(SamplingMode::Flat);
     for file in files {
         let duration = Duration::from_secs_f64(file.duration);
         println!("intended duration: {} = {:?}", &file.filename, duration);
