@@ -53,6 +53,7 @@ jobs:
         with:
           show-progress: false
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install Rust Toolchain
         uses: ./.github/actions/rustup
@@ -119,6 +120,7 @@ jobs:
         with:
           show-progress: false
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install Rust Toolchain
         uses: ./.github/actions/rustup
