@@ -100,6 +100,7 @@ glob               = { version = "0.3.1" }
 ignore             = { version = "0.4.22" }
 itertools          = { version = "0.12.1" }
 jemallocator       = { version = "0.5.4" }
+layout_inspect     = { git = "https://github.com/overlookmotel/layout_inspect", rev = "5ba0afe" }
 lazy_static        = { version = "1.4.0" }
 miette             = { version = "7.2.0", features = ["fancy-no-syscall"] }
 mimalloc           = { version = "0.1.39" }
