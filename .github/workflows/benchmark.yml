@@ -104,9 +104,8 @@ jobs:
           RUSTFLAGS: "-C debuginfo=2 -C strip=none -g --cfg codspeed"
         shell: bash
         run: |
-          cargo build --release -p oxc_benchmark --features codspeed \
-            ${{ matrix.component == 'parser_napi' && '--features serde' || ''}} \
-            --bench ${{ matrix.component }}
+          cargo build --release -p oxc_benchmark --bench ${{ matrix.component }} \
+            --features ${{ matrix.component == 'parser_napi' && 'codspeed_napi' || 'codspeed'}}
           mkdir -p target/codspeed/oxc_benchmark/
           mv target/release/deps/${{ matrix.component }}-* target/codspeed/oxc_benchmark
           rm -rf target/codspeed/oxc_benchmark/*.d

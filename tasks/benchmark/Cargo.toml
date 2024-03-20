@@ -74,5 +74,5 @@ serde      = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
 [features]
-codspeed = ["criterion/codspeed"]
-serde    = ["dep:serde", "dep:serde_json"]
+codspeed      = ["criterion/codspeed"]
+codspeed_napi = ["criterion/codspeed", "dep:serde", "dep:serde_json"]
