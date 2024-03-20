@@ -13,12 +13,13 @@ struct BenchResult {
 }
 
 /// This is a fake benchmark which is only here to get benchmarks for NAPI parser into CodSpeed.
-/// It's a workaround for CodSpeed's measurement of JS + NAPI being wildly inaccurate.
+/// It's a workaround for CodSpeed's measurement of JS + NAPI being wildly inaccurate:
 /// https://github.com/CodSpeedHQ/action/issues/96
-/// So instead in CI we run the actual benchmark outside CodSpeed's instrumentation
+/// So instead in CI we run the actual benchmark without CodSpeed's instrumentation
 /// (see `.github/workflows/benchmark.yml` and `napi/parser/parse.bench.mjs`).
-/// `parse.bench.mjs` writes the measurements for the benchmarks to a file `results.json`.
-/// This pseudo-benchmark reads that file and just busy-loops for the specified time.
+/// `parse.bench.mjs` writes the results of the benchmarks to a file `results.json`.
+/// This pseudo-benchmark reads that file and just performs meaningless calculations in a loop
+/// the number of times required to take same amount of time as the original benchmark.
 fn bench_parser_napi(criterion: &mut Criterion) {
     let data_dir = env::var("DATA_DIR").unwrap();
     let results_path: PathBuf = [&data_dir, "results.json"].iter().collect();
@@ -32,12 +33,6 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     group.warm_up_time(Duration::from_micros(1));
     group.sampling_mode(SamplingMode::Flat);
     for file in files {
-        // Perform a bunch of meaningless operations which take the duration required to execute
-        println!(
-            "intended duration: {} = {:?}",
-            &file.filename,
-            Duration::from_secs_f64(file.duration)
-        );
         let cycles = (file.duration * 266672645.0) as u64;
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
             b.iter(|| {
