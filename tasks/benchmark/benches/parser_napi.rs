@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::{env, fs, path::PathBuf, thread::sleep, time::Duration};
 
 use oxc_benchmark::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -38,9 +34,8 @@ fn bench_parser_napi(criterion: &mut Criterion) {
         let mut iterations = 0;
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
             b.iter(|| {
-                let start = Instant::now();
                 iterations += 1;
-                while start.elapsed() < duration {}
+                sleep(duration);
             });
         });
         println!("iterations for {}: {}", &file.filename, iterations);
