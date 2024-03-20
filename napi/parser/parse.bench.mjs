@@ -45,7 +45,7 @@ const files = await Promise.all(urls.map(async (url) => {
 const bench = new Bench();
 
 for (const {filename, code} of files) {
-    bench.add(`parser(napi)[${filename}]`, () => {
+    bench.add(`parser_napi[${filename}]`, () => {
         const res = parseSync(code, {sourceFilename: filename});
         JSON.parse(res.program);
     });
