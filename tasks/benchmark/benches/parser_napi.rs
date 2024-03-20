@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::{env, fs, path::PathBuf, time::Duration};
 
 use oxc_benchmark::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -36,11 +32,13 @@ fn bench_parser_napi(criterion: &mut Criterion) {
         let duration = Duration::from_secs_f64(file.duration);
         println!("intended duration: {} = {:?}", &file.filename, duration);
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
+            /*
             b.iter(|| {
                 let start = Instant::now();
                 while start.elapsed() < duration {}
             });
-            // b.iter_custom(|iters| duration.mul_f64(iters as f64));
+            */
+            b.iter_custom(|iters| duration.mul_f64(iters as f64));
         });
     }
     group.finish();
