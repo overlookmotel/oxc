@@ -1,6 +1,12 @@
-use std::{env, fs, path::PathBuf, time::Duration};
+use std::{
+    env, fs,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
-use oxc_benchmark::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
+use oxc_benchmark::{
+    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode,
+};
 
 use serde::Deserialize;
 
@@ -36,6 +42,13 @@ fn bench_parser_napi(criterion: &mut Criterion) {
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
             b.iter(|| {
                 iterations += 1;
+                #[inline(never)]
+                fn run(duration: Duration) -> Instant {
+                    let start = Instant::now();
+                    while start.elapsed() < duration {}
+                    Instant::now()
+                }
+                black_box(run(duration));
             });
         });
         println!("iterations for {}: {}", &file.filename, iterations);
