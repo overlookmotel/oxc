@@ -7,7 +7,8 @@ import fixtures from './fixtures.mjs';
 
 const IS_CI = !!process.env.CI,
     ACCURATE = IS_CI || !!process.env.ACCURATE,
-    CODSPEED = !!process.env.CODSPEED;
+    CODSPEED = !!process.env.CODSPEED,
+    DESERIALIZE_ONLY = !!process.env.DESERIALIZE_ONLY;
 
 let bench = new Bench(
     ACCURATE
@@ -24,10 +25,25 @@ if (CODSPEED) {
 }
 
 for (const {filename, sourceBuff, allocSize} of fixtures) {
-    bench.add(`parser_napi${CODSPEED ? '_inst' : ''}[${filename}]`, () => {
-        const buff = parseSyncRaw(sourceBuff, {sourceFilename: filename}, allocSize);
+    function getBuffer() {
+        return parseSyncRaw(sourceBuff, {sourceFilename: filename}, allocSize);
+    }
+    function deser(buff) {
         deserialize(buff, sourceBuff);
-    });
+    }
+
+    if (DESERIALIZE_ONLY) {
+        let buff;
+        bench.add(
+            `parser_napi_deser[${filename}]`,
+            () => { deser(buff); },
+            {beforeAll() { buff = getBuffer(); }}
+        )
+    } else {
+        bench.add(`parser_napi${CODSPEED ? '_inst' : ''}[${filename}]`, () => {
+            deser(getBuffer());
+        });
+    }
 }
 
 console.log('Warming up');
