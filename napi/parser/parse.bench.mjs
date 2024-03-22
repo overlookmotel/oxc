@@ -6,7 +6,8 @@ import {parseSync} from './index.js';
 
 const IS_CI = !!process.env.CI,
     ACCURATE = IS_CI || !!process.env.ACCURATE,
-    CODSPEED = !!process.env.CODSPEED;
+    CODSPEED = !!process.env.CODSPEED,
+    DESERIALIZE_ONLY = !!process.env.DESERIALIZE_ONLY;
 
 const urls = [
     // TypeScript syntax (2.81MB)
@@ -56,11 +57,31 @@ if (CODSPEED) {
     bench = withCodSpeed(bench);
 }
 
+const namePostfix = CODSPEED ? '_inst' : '';
+
 for (const {filename, code} of files) {
-    bench.add(`parser_napi${CODSPEED ? '_inst' : ''}[${filename}]`, () => {
-        const res = parseSync(code, {sourceFilename: filename});
-        JSON.parse(res.program);
-    });
+    function native() {
+        return parseSync(code, {sourceFilename: filename}).program;
+    }
+    function deser(json) {
+        JSON.parse(json);
+    }
+
+    if (DESERIALIZE_ONLY) {
+        let res;
+        bench.add(
+            `parser_napi_deser${namePostfix}[${filename}]`,
+            () => { deser(res); },
+            {
+                beforeAll() { res = native(); },
+                afterAll() { res = null; }
+            }
+        );
+    } else {
+        bench.add(`parser_napi${namePostfix}[${filename}]`, () => {
+            deser(native());
+        });
+    }
 }
 
 console.log('Warming up');

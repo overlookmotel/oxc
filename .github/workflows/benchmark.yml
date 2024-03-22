@@ -31,6 +31,9 @@ jobs:
   benchmark-napi:
     name: Benchmark NAPI parser
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: [full, deserialize_only]
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v4
@@ -59,7 +62,7 @@ jobs:
       - name: Start bench results interceptor server
         working-directory: ./tasks/benchmark/codspeed
         env:
-          COMPONENT: 'parser_napi'
+          COMPONENT: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}
         run: |
           corepack enable
           pnpm install
@@ -79,6 +82,8 @@ jobs:
 
       - name: Run NAPI Benchmark
         working-directory: ./napi/parser
+        env:
+          DESERIALIZE_ONLY: ${{ matrix.mode == 'deserialize_only' && 'true' || '' }}
         run: node parse.bench.mjs
 
       - name: Build Rust benchmark
@@ -94,6 +99,8 @@ jobs:
       - name: Run Rust benchmark
         uses: CodSpeedHQ/action@v2
         timeout-minutes: 30
+        env:
+          DESERIALIZE_ONLY: ${{ matrix.mode == 'deserialize_only' && 'true' || '' }}
         with:
           run: cargo codspeed run
           # Dummy token for tokenless runs, to suppress logging hash of metadata JSON (see `upload.mjs`)
@@ -103,7 +110,7 @@ jobs:
       - name: Upload bench data artefact
         uses: actions/upload-artifact@v4
         with:
-          name: 'parser_napi'
+          name: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}
           path: ${{ env.DATA_DIR }}
           if-no-files-found: error
           retention-days: 1
@@ -111,6 +118,9 @@ jobs:
   benchmark-napi-instrumented:
     name: Benchmark NAPI parser with CodSpeed instrumentation
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: [full, deserialize_only]
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v4
@@ -139,7 +149,7 @@ jobs:
       - name: Start bench results interceptor server
         working-directory: ./tasks/benchmark/codspeed
         env:
-          COMPONENT: 'parser_napi_inst'
+          COMPONENT: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}_inst
         run: |
           corepack enable
           pnpm install
@@ -157,6 +167,7 @@ jobs:
         timeout-minutes: 30
         env:
           CODSPEED: 'true'
+          DESERIALIZE_ONLY: ${{ matrix.mode == 'deserialize_only' && 'true' || '' }}
         with:
           run: node parse.bench.mjs
           working-directory: ./napi/parser
@@ -167,7 +178,7 @@ jobs:
       - name: Upload bench data artefact
         uses: actions/upload-artifact@v4
         with:
-          name: 'parser_napi_inst'
+          name: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}_inst
           path: ${{ env.DATA_DIR }}
           if-no-files-found: error
           retention-days: 1
