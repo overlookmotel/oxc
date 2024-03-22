@@ -27,7 +27,12 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     let files: Vec<BenchResult> = serde_json::from_reader(results_file).unwrap();
     fs::remove_file(&results_path).unwrap();
 
-    let mut group = criterion.benchmark_group("parser_napi");
+    let group_name = match env::var("DESERIALIZE_ONLY") {
+        Ok(deser) if deser == "true" => "parser_napi_deser",
+        _ => "parser_napi",
+    };
+
+    let mut group = criterion.benchmark_group(group_name);
     // Reduce time to run benchmark as much as possible (10 is min for sample size)
     group.sample_size(10);
     group.warm_up_time(Duration::from_micros(1));

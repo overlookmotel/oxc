@@ -5,7 +5,9 @@ import {Bench} from 'tinybench';
 import {parseSync} from './index.js';
 
 const IS_CI = !!process.env.CI,
-    ACCURATE = IS_CI || process.env.ACCURATE;
+    ACCURATE = IS_CI || !!process.env.ACCURATE,
+    CODSPEED = !!process.env.CODSPEED,
+    DESERIALIZE_ONLY = !!process.env.DESERIALIZE_ONLY;
 
 const urls = [
     // TypeScript syntax (2.81MB)
@@ -41,7 +43,7 @@ const files = await Promise.all(urls.map(async (url) => {
     return {filename, code};
 }));
 
-const bench = new Bench(
+let bench = new Bench(
     ACCURATE
     ? {
         warmupIterations: 20, // Default is 5
@@ -50,12 +52,36 @@ const bench = new Bench(
     }
     : undefined
 );
+if (CODSPEED) {
+    const {withCodSpeed} = await import('@codspeed/tinybench-plugin');
+    bench = withCodSpeed(bench);
+}
+
+const namePostfix = CODSPEED ? '_inst' : '';
 
 for (const {filename, code} of files) {
-    bench.add(`parser_napi[${filename}]`, () => {
-        const res = parseSync(code, {sourceFilename: filename});
-        JSON.parse(res.program);
-    });
+    function native() {
+        return parseSync(code, {sourceFilename: filename}).program;
+    }
+    function deser(json) {
+        JSON.parse(json);
+    }
+
+    if (DESERIALIZE_ONLY) {
+        let res;
+        bench.add(
+            `parser_napi_deser${namePostfix}[${filename}]`,
+            () => { deser(res); },
+            {
+                beforeAll() { res = native(); },
+                afterAll() { res = null; }
+            }
+        );
+    } else {
+        bench.add(`parser_napi${namePostfix}[${filename}]`, () => {
+            deser(native());
+        });
+    }
 }
 
 console.log('Warming up');
@@ -65,7 +91,7 @@ await bench.run();
 console.table(bench.table());
 
 // If running on CI, save results to file
-if (IS_CI) {
+if (IS_CI && !CODSPEED) {
     const dataDir = process.env.DATA_DIR;
     const results = bench.tasks.map(task => ({
         filename: task.name.match(/\[(.+)\]$/)[1],
