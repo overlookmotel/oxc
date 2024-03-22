@@ -5,7 +5,8 @@ import {Bench} from 'tinybench';
 import {parseSync} from './index.js';
 
 const IS_CI = !!process.env.CI,
-    ACCURATE = IS_CI || process.env.ACCURATE;
+    ACCURATE = IS_CI || !!process.env.ACCURATE,
+    CODSPEED = !!process.env.CODSPEED;
 
 const urls = [
     // TypeScript syntax (2.81MB)
@@ -41,7 +42,7 @@ const files = await Promise.all(urls.map(async (url) => {
     return {filename, code};
 }));
 
-const bench = new Bench(
+let bench = new Bench(
     ACCURATE
     ? {
         warmupIterations: 20, // Default is 5
@@ -50,9 +51,13 @@ const bench = new Bench(
     }
     : undefined
 );
+if (CODSPEED) {
+    const {withCodSpeed} = await import('@codspeed/tinybench-plugin');
+    bench = withCodSpeed(bench);
+}
 
 for (const {filename, code} of files) {
-    bench.add(`parser_napi[${filename}]`, () => {
+    bench.add(`parser_napi${CODSPEED ? '_inst' : ''}[${filename}]`, () => {
         const res = parseSync(code, {sourceFilename: filename});
         JSON.parse(res.program);
     });
@@ -65,7 +70,7 @@ await bench.run();
 console.table(bench.table());
 
 // If running on CI, save results to file
-if (IS_CI) {
+if (IS_CI && !CODSPEED) {
     const dataDir = process.env.DATA_DIR;
     const results = bench.tasks.map(task => ({
         filename: task.name.match(/\[(.+)\]$/)[1],
