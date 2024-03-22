@@ -61,3 +61,5 @@ if (IS_CI && !CODSPEED) {
     }));
     await writeFile(pathJoin(dataDir, 'results.json'), JSON.stringify(results));
 }
+
+// Dummy comment to run benches
