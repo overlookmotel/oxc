@@ -4,14 +4,11 @@
 
 import {createReadStream} from 'fs';
 import fs from 'fs/promises';
-import {join as pathJoin, dirname} from 'path';
-import {fileURLToPath} from 'url';
+import {join as pathJoin} from 'path';
 import {createHash} from 'crypto';
 import assert from 'assert';
 import tar from 'tar';
 import axios from 'axios';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const METADATA_SUFFIX = '_metadata.json',
     CODSPEED_UPLOAD_URL = 'https://api.codspeed.io/upload';
@@ -45,21 +42,6 @@ for (const filename of await fs.readdir(dataDir)) {
         
         components.add(component);
     }
-}
-
-// Add cached results for benchmarks which weren't run
-const cacheZipPath = pathJoin(__dirname, 'cachedBenches.tar.gz'),
-    cacheDir = pathJoin(dataDir, 'cache');
-await fs.mkdir(cacheDir);
-await tar.extract({file: cacheZipPath, cwd: cacheDir});
-
-for (const filename of await fs.readdir(cacheDir)) {
-    const [, component, pid] = filename.match(/^(.+)_(\d+)\.out$/);
-    if (components.has(component)) continue;
-    
-    const outPath = pathJoin(dataDir, filename);
-    await fs.rename(pathJoin(cacheDir, filename), outPath);
-    profiles.set(`${component}_${pid}`, {pid: +pid, outPath, mapPath: null});
 }
 
 // Move all profile files to one directory
