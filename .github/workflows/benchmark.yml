@@ -10,6 +10,9 @@
 # 2. Once all runs are complete, combine the data for all the runs together.
 # 3. Upload the combined data to CodSpeed as one.
 # This is performed by some short NodeJS scripts in `tasks/benchmark/codspeed`.
+#
+# `changed-benchmarks` action checks which benchmarks may be affected by the code changes
+# in the PR / commit. Benchmarks whose dependencies are not altered are skipped.
 
 name: Benchmark
 
@@ -40,22 +43,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Determine which benchmarks need to run due to changes to their dependencies
+  changed-benchmarks:
+    name: Get changed benchmarks
+    runs-on: ubuntu-latest
+    outputs:
+      benchmarks: ${{ steps.changed-benchmarks.outputs.benchmarks }}
+      separate_benchmarks: ${{ steps.changed-benchmarks.outputs.separate_benchmarks }}
+    steps:
+      - name: Checkout Branch
+        uses: taiki-e/checkout-action@v1
+
+      - name: Get changed benchmarks
+        id: changed-benchmarks
+        uses: ./.github/actions/changed-benchmarks
+        with:
+          benchmarks: |
+            codegen_sourcemap
+            lexer
+            minifier
+            parser
+            # prettier
+            semantic
+            sourcemap
+            transformer
+          separate_benchmarks: |
+            linter
+            # parser_napi
+
   # Build and run benchmarks for all components except linter
+  # (filtered down to only those that need to run)
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
+    needs: changed-benchmarks
+    if: ${{ needs.changed-benchmarks.outputs.benchmarks != '[]' }}
     strategy:
       fail-fast: true
       matrix:
-        component:
-          - lexer
-          - parser
-          - transformer
-          - semantic
-          - minifier
-          - codegen_sourcemap
-          - sourcemap
-
+        component: ${{ fromJSON(needs.changed-benchmarks.outputs.benchmarks) }}
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -117,9 +143,12 @@ jobs:
   # Build linter benchmark.
   # Linter benchmarks are much slower than the rest, so we run each fixture in a separate job.
   # But only build the linter benchmark once.
+  # Skip if linter benchmark doesn't need to run.
   build-linter:
     name: Build Linter Benchmark
     runs-on: ubuntu-latest
+    needs: changed-benchmarks
+    if: contains(needs.changed-benchmarks.outputs.separate_benchmarks, '"linter"')
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -160,7 +189,6 @@ jobs:
         fixture:
           - 0
           - 1
-
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -299,8 +327,18 @@ jobs:
     name: Upload benchmarks
     # needs: [benchmark, benchmark-linter, benchmark-napi]
     needs: [benchmark, benchmark-linter]
+    # `always()` because need this job to run even if benchmark or benchmark-linter jobs are skipped
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      # This check required because of `if: always()` above
+      - name: Check benchmark jobs completed
+        if: |
+          (needs.benchmark.result != 'success' && needs.benchmark.result != 'skipped')
+          || (needs.benchmark-linter.result != 'success' && needs.benchmark-linter.result != 'skipped')
+          || (needs.benchmark.result == 'skipped' && needs.benchmark-linter.result == 'skipped')
+        run: exit 1
+
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
 

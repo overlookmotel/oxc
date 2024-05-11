@@ -1,0 +1,25 @@
+name: Get changed crates inner
+
+description: Get changed crates inner
+
+inputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (line break-separated)'
+    required: true
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (line break-separated)'
+    required: false
+    default: ''
+  changed_dirs:
+    description: 'List of changed directories (JSON)'
+    required: true
+
+outputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (JSON)'
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (JSON)'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'

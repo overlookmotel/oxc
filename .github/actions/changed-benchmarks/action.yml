@@ -1,0 +1,40 @@
+name: Get changed benchmarks
+
+description: Get changed benchmarks
+
+runs:
+  using: composite
+  steps:
+    - name: Get changed files
+      id: changed-files
+      uses: tj-actions/changed-files@v44
+      with:
+        dir_names: true
+        dir_names_max_depth: 2
+        output_renamed_files_as_deleted_and_added: true
+        matrix: true
+    
+    - name: Get changed benchmarks
+      id: changed-benchmarks
+      uses: ./.github/actions/changed-benchmarks/inner
+      with:
+        benchmarks: ${{ inputs.benchmarks }}
+        separate_benchmarks: ${{ inputs.separate_benchmarks }}
+        changed_dirs: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+
+inputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (line break-separated)'
+    required: true
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (line break-separated)'
+    required: false
+    default: ''
+
+outputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (JSON)'
+    value: ${{ steps.changed-benchmarks.outputs.benchmarks }}
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (JSON)'
+    value: ${{ steps.changed-benchmarks.outputs.separate_benchmarks }}
