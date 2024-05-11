@@ -38,3 +38,6 @@ outputs:
   separate_benchmarks:
     description: 'List of benchmarks that need to run separately (JSON)'
     value: ${{ steps.changed-benchmarks.outputs.separate_benchmarks }}
+  skip_benchmarks:
+    description: 'List of benchmarks that do not need to run (JSON)'
+    value: ${{ steps.changed-benchmarks.outputs.skip_benchmarks }}

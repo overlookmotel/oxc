@@ -19,6 +19,8 @@ outputs:
     description: 'List of benchmarks that need to run (JSON)'
   separate_benchmarks:
     description: 'List of benchmarks that need to run separately (JSON)'
+  skip_benchmarks:
+    description: 'List of benchmarks that do not need to run (JSON)'
 
 runs:
   using: 'node20'

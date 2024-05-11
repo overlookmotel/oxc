@@ -17,17 +17,12 @@ if (IS_DEV) {
     // Local testing
     const CHANGED_DIRS = ['crates/oxc_semantic'];
     const BENCHMARKS = [
-        'codegen_sourcemap', 'lexer', 'linter', 'minifier',
-        'parser', 'semantic', 'sourcemap', 'transformer',
+        'codegen_sourcemap', 'lexer', 'minifier', 'parser', 'semantic', 'sourcemap', 'transformer',
     ];
     const SEPARATE_BENCHMARKS = ['linter'];
 
-    const {benchmarks, separateBenchmarks} = await getOutputs(
-        CHANGED_DIRS, BENCHMARKS, SEPARATE_BENCHMARKS,
-    );
-    console.log('all benchmarks:', [...BENCHMARKS, ...SEPARATE_BENCHMARKS]);
-    console.log('run benchmarks:', benchmarks);
-    console.log('run separate benchmarks:', separateBenchmarks);
+    console.log('All benchmarks:', [...BENCHMARKS, ...SEPARATE_BENCHMARKS]);
+    await getOutputs(CHANGED_DIRS, BENCHMARKS, SEPARATE_BENCHMARKS);
 } else {
     // On CI
     run();
@@ -44,6 +39,7 @@ async function run() {
         const output = await getOutputs(changedDirs, benchmarks, separateBenchmarks);
         core.setOutput('benchmarks', JSON.stringify(output.benchmarks));
         core.setOutput('separate_benchmarks', JSON.stringify(output.separateBenchmarks));
+        core.setOutput('skip_benchmarks', JSON.stringify(output.skipBenchmarks));
         console.log('Done');
     } catch (err) {
         core.setFailed(err?.stack || 'Unknown error');
@@ -56,18 +52,21 @@ async function run() {
  */
 async function getOutputs(changedDirs, mainBenchmarks, separateBenchmarks) {
     const allBenchmarks = [...mainBenchmarks, ...separateBenchmarks];
-    const benchmarksToRun = await getBenchesToRun(changedDirs, allBenchmarks);
+    const allBenchmarksToRun = new Set(await getBenchesToRun(changedDirs, allBenchmarks));
 
-    const output = {benchmarks: [], separateBenchmarks: []};
-    for (const benchName of benchmarksToRun) {
-        if (separateBenchmarks.includes(benchName)) {
-            output.separateBenchmarks.push(benchName);
-        } else {
-            output.benchmarks.push(benchName);
-        }
-    }
+    const output = {benchmarks: null, separateBenchmarks: null, skipBenchmarks: []};
+    const filter = benches => benches.filter((benchName) => {
+        if (allBenchmarksToRun.has(benchName)) return true;
+        output.skipBenchmarks.push(benchName);
+        return false;
+    });
+    output.benchmarks = filter(mainBenchmarks);
+    output.separateBenchmarks = filter(separateBenchmarks);
+
     console.log('Run benchmarks:', output.benchmarks);
     console.log('Run benchmarks separately:', output.separateBenchmarks);
+    console.log('Skip benchmarks:', output.skipBenchmarks);
+
     return output;
 }
 
