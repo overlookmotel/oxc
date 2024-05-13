@@ -7,6 +7,8 @@ use crate::ancestor::{Ancestor, AncestorType};
 const INITIAL_STACK_CAPACITY: usize = 64; // 64 entries = 1 KiB
 const INITIAL_SCOPE_STACK_CAPACITY: usize = 32; // 32 entries = 64 bytes
 
+// Dummy comment to run benchmarks
+
 /// Traverse context.
 ///
 /// Passed to all AST visitor functions.
