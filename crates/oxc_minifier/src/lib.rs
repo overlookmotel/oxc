@@ -1,5 +1,7 @@
 //! ECMAScript Minifier
 
+// Dummy comment to run benchmarks
+
 mod compressor;
 mod mangler;
 
