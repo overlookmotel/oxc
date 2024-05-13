@@ -14,3 +14,5 @@ pub use sourcemap::SourceMap;
 pub use sourcemap_builder::SourceMapBuilder;
 pub use sourcemap_visualizer::SourcemapVisualizer;
 pub use token::{SourceViewToken, Token};
+
+// Dummy comment to run benchmarks
