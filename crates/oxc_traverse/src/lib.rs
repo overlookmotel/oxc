@@ -60,6 +60,8 @@
 //! scheme could very easily be derailed entirely by a single mistake, so in my opinion, it's unwise
 //! to edit by hand.
 
+// Dummy comment to run benchmarks
+
 use oxc_allocator::Allocator;
 
 use oxc_ast::ast::Program;
