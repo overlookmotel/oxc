@@ -6,8 +6,6 @@ use oxc_span::CompactStr;
 
 type Slot = usize;
 
-// Dummy comment to run benchmarks
-
 #[derive(Debug)]
 pub struct Mangler {
     symbol_table: SymbolTable,
