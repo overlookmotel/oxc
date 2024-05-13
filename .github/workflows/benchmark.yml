@@ -10,6 +10,9 @@
 # 2. Once all runs are complete, combine the data for all the runs together.
 # 3. Upload the combined data to CodSpeed as one.
 # This is performed by some short NodeJS scripts in `tasks/benchmark/codspeed`.
+#
+# `changed-benchmarks` action checks which benchmarks may be affected by the code changes
+# in the PR / commit. Benchmarks whose dependencies are not altered are skipped.
 
 name: Benchmark
 
@@ -23,6 +26,8 @@ on:
       - 'napi/parser/**/*.mjs'
       - 'Cargo.lock'
       - '.github/workflows/benchmark.yml'
+      - '.github/actions/changed-benchmarks/**/*'
+      - '.github/actions/delete-artefacts/**/*'
       - 'tasks/benchmark/codspeed/*.mjs'
   push:
     branches:
@@ -33,6 +38,8 @@ on:
       - 'napi/parser/**/*.mjs'
       - 'Cargo.lock'
       - '.github/workflows/benchmark.yml'
+      - '.github/actions/changed-benchmarks/**/*'
+      - '.github/actions/delete-artefacts/**/*'
       - 'tasks/benchmark/codspeed/*.mjs'
 
 concurrency:
@@ -40,22 +47,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Determine which benchmarks need to run due to changes to their dependencies.
+  # For any which don't, re-upload bench result artefacts from previous run on base commit
+  # on `main` branch, so those results get sent to CodSpeed along with the newly-run benchmarks.
+  changed-benchmarks:
+    name: Get changed benchmarks
+    runs-on: ubuntu-latest
+    outputs:
+      benchmarks: ${{ steps.changed-benchmarks.outputs.benchmarks }}
+      separate_benchmarks: ${{ steps.changed-benchmarks.outputs.separate_benchmarks }}
+      workflow_run_id: ${{ steps.changed-benchmarks.outputs.workflow_run_id }}
+    steps:
+      # Need to use `actions/checkout` not `taiki-e/checkout-action` for `fetch-depth` support.
+      # https://github.com/tj-actions/changed-files#usage-
+      - name: Checkout Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'push' && 2 || 1 }}
+
+      - name: Get changed benchmarks
+        id: changed-benchmarks
+        uses: ./.github/actions/changed-benchmarks
+        with:
+          benchmarks: |
+            codegen_sourcemap
+            lexer
+            minifier
+            parser
+            # prettier
+            semantic
+            sourcemap
+            transformer
+          separate_benchmarks: |
+            # `x2` is number of fixtures. Update if add more fixtures in `benchmark-linter` job.
+            linter x2
+            # parser_napi
+          retention_days: ${{ github.event_name == 'push' && github.ref_name == 'main' && 90 || 1 }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   # Build and run benchmarks for all components except linter
+  # (filtered down to only those that need to run)
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
+    needs: changed-benchmarks
+    if: ${{ needs.changed-benchmarks.outputs.benchmarks != '[]' }}
     strategy:
       fail-fast: true
       matrix:
-        component:
-          - lexer
-          - parser
-          - transformer
-          - semantic
-          - minifier
-          - codegen_sourcemap
-          - sourcemap
-
+        component: ${{ fromJSON(needs.changed-benchmarks.outputs.benchmarks) }}
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -112,14 +152,17 @@ jobs:
           name: result-${{ matrix.component }}
           path: ${{ env.DATA_DIR }} # env.DATA_DIR from `capture.mjs`
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ github.event_name == 'push' && github.ref_name == 'main' && 90 || 1 }}
 
   # Build linter benchmark.
   # Linter benchmarks are much slower than the rest, so we run each fixture in a separate job.
   # But only build the linter benchmark once.
+  # Skip if linter benchmark doesn't need to run.
   build-linter:
     name: Build Linter Benchmark
     runs-on: ubuntu-latest
+    needs: changed-benchmarks
+    if: ${{ contains(needs.changed-benchmarks.outputs.separate_benchmarks, '"linter"') }}
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -157,10 +200,10 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        # Update `x2` in `changed-benchmarks` job if add more fixtures here
         fixture:
           - 0
           - 1
-
     steps:
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
@@ -215,12 +258,25 @@ jobs:
           name: result-linter${{ matrix.fixture }}
           path: ${{ env.DATA_DIR }} # env.DATA_DIR from `capture.mjs`
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ github.event_name == 'push' && github.ref_name == 'main' && 90 || 1 }}
+
+  # Delete linter binary
+  cleanup-linter:
+    name: Clean up after linter benchmark
+    needs: benchmark-linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete binary
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: benchmark-linter
+          failOnError: false
 
   # benchmark-napi:
     # name: Benchmark NAPI parser
     # runs-on: ubuntu-latest
-    # if: false
+    # needs: changed-benchmarks
+    # if: ${{ contains(needs.changed-benchmarks.outputs.separate_benchmarks, '"parser_napi"') }}
     # steps:
       # - name: Checkout Branch
         # uses: taiki-e/checkout-action@v1
@@ -292,15 +348,25 @@ jobs:
           # name: 'parser_napi'
           # path: ${{ env.DATA_DIR }}
           # if-no-files-found: error
-          # retention-days: 1
+          # retention-days: ${{ github.event_name == 'push' && github.ref_name == 'main' && 90 || 1 }}
 
   # Upload combined benchmark results to CodSpeed
   upload:
     name: Upload benchmarks
-    # needs: [benchmark, benchmark-linter, benchmark-napi]
-    needs: [benchmark, benchmark-linter]
+    # needs: [benchmark, benchmark-linter, benchmark-napi, changed-benchmarks]
+    needs: [benchmark, benchmark-linter, changed-benchmarks]
+    # `always()` because need this job to run even if other jobs are skipped
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      # This check required because of `if: always()` above
+      - name: Check benchmark jobs completed
+        if: |
+          (needs.benchmark.result != 'success' && needs.benchmark.result != 'skipped')
+          || (needs.benchmark-linter.result != 'success' && needs.benchmark-linter.result != 'skipped')
+          || (needs.benchmark.result == 'skipped' && needs.benchmark-linter.result == 'skipped')
+        run: exit 1
+
       - name: Checkout Branch
         uses: taiki-e/checkout-action@v1
 
@@ -330,10 +396,13 @@ jobs:
           CODSPEED_TOKEN: ${{ secrets.CODSPEED_TOKEN }}
         run: node upload.mjs
 
-      - name: Delete temporary artefacts
-        uses: geekyeggo/delete-artifact@v5
+      - name: Delete benchmark result artefacts
+        uses: ./.github/actions/delete-artefacts
+        # Push on main branch: Delete artefacts for previous run on main (superceded by this run's).
+        # Pull request: Delete artefacts for this run (not needed once this workflow completes).
+        if: |
+          github.event_name != 'push' || github.ref_name != 'main'
+          || needs.changed-benchmarks.outputs.workflow_run_id != ''
         with:
-          name: |
-            result-*
-            benchmark-linter
-          failOnError: false
+          workflow_run_id: ${{ github.event_name == 'push' && github.ref_name == 'main' && needs.changed-benchmarks.outputs.workflow_run_id || '' }}
+          token: ${{ secrets.GITHUB_TOKEN }}

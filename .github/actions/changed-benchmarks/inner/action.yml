@@ -1,0 +1,36 @@
+name: Get changed benchmarks inner
+
+description: Get changed benchmarks inner
+
+inputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (line break-separated)'
+    required: true
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (line break-separated)'
+    required: false
+    default: ''
+  changed_dirs:
+    description: 'List of changed directories (JSON)'
+    required: true
+  base_sha:
+    description: 'Base SHA of main branch'
+    required: true
+  token:
+    description: 'Github Actions token'
+    required: true
+  retention_days:
+    description: 'Number of days to retain benchmark result artefacts'
+    required: true
+
+outputs:
+  benchmarks:
+    description: 'List of benchmarks that need to run (JSON)'
+  separate_benchmarks:
+    description: 'List of benchmarks that need to run separately (JSON)'
+  workflow_run_id:
+    description: 'Workflow run ID for previous benchmark run on main branch'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'

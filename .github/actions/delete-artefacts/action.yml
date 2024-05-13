@@ -1,0 +1,15 @@
+name: Delete artefacts for workflow run
+
+description: Delete artefacts for workflow run
+
+inputs:
+  workflow_run_id:
+    description: 'Workflow run ID to delete artefacts for (current run if not provided)'
+    required: false
+  token:
+    description: 'Github Actions token'
+    required: true
+
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'
