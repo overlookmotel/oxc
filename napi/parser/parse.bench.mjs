@@ -93,9 +93,6 @@ console.table(bench.table());
 // If running on CI, save results to file
 if (IS_CI && !CODSPEED) {
     const dataDir = process.env.DATA_DIR;
-    const results = bench.tasks.map(task => ({
-        filename: task.name.match(/\[(.+)\]$/)[1],
-        duration: task.result.period / 1000, // In seconds
-    }));
+    const results = bench.tasks.map(task => ({name: task.name, ms: task.result.period}));
     await writeFile(pathJoin(dataDir, 'results.json'), JSON.stringify(results));
 }

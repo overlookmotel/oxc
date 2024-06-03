@@ -1,0 +1,63 @@
+# callgrind format
+version: 1
+creator: callgrind-3.21.0.codspeed
+pid: <pid>
+cmd:  /home/runner/work/oxc/oxc/target/codspeed/oxc_benchmark/parser_napi-6bb6a999bb7a99d5
+part: 1
+
+
+desc: I1 cache: 32768 B, 64 B, 8-way associative
+desc: D1 cache: 32768 B, 64 B, 8-way associative
+desc: LL cache: 8388608 B, 64 B, 16-way associative
+
+desc: Timerange: Basic block 0 - 0
+desc: Trigger: Client Request: Metadata: codspeed-rust 2.4.0
+
+positions: line
+event: sysTime : sysTime (elapsed ns)
+event: sysCpuTime : sysCpuTime (system cpu ns)
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw sysCount sysTime sysCpuTime
+summary: 0
+
+
+totals: 0
+
+part: 2
+
+desc: Timerange: Basic block 0 - 4
+desc: Trigger: Client Request: tasks/benchmark/benches/parser_napi.rs::parser::bench_parser_napi::<name>
+
+positions: line
+event: sysTime : sysTime (elapsed ns)
+event: sysCpuTime : sysCpuTime (system cpu ns)
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw sysCount sysTime sysCpuTime
+summary: 0
+
+
+ob=/home/runner/work/oxc/oxc/target/codspeed/oxc_benchmark/parser_napi-6bb6a999bb7a99d5
+fl=/home/runner/work/oxc/oxc/tasks/benchmark/benches/parser_napi.rs
+fn=parser_napi::bench_parser_napi::{{closure}}::{{closure}}::wallclock
+52 1 0 0 1 0 0 1
++1 1 1
+
+fn=criterion2::codspeed::bencher::Bencher::iter
+54 1 0 1 1 0 1 1 0 1
+cfn=parser_napi::bench_parser_napi::{{closure}}::{{closure}}::wallclock
+calls=1 -2 
+* <cycles-minus-one> 1 0 1 0 0 1
+
+totals: <cycles> 1 1 2 0 1 2 0 1
+
+part: 3
+
+desc: Timerange: Basic block 4 - 5
+desc: Trigger: Program termination
+
+positions: line
+event: sysTime : sysTime (elapsed ns)
+event: sysCpuTime : sysCpuTime (system cpu ns)
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw sysCount sysTime sysCpuTime
+summary: 0
+
+
+totals: 0
