@@ -11,3 +11,5 @@ fs.mkdirSync(dataDir);
 
 // Output dir path to env var
 fs.appendFileSync(process.env.GITHUB_ENV, `DATA_DIR=${dataDir}\n`);
+
+// Dummy comment to run benches
