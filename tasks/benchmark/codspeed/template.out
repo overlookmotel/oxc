@@ -36,13 +36,13 @@ summary: 0
 
 ob=/home/runner/work/oxc/oxc/target/codspeed/oxc_benchmark/wallclock-6bb6a999bb7a99d5
 fl=/home/runner/work/oxc/oxc/tasks/benchmark/benches/wallclock_bench.rs
-fn=parser_napi::bench_parser_napi::{{closure}}::{{closure}}::wallclock
+fn=wallclock_bench::bench_parser_napi::{{closure}}::{{closure}}::wallclock
 52 1 0 0 1 0 0 1
 +1 1 1
 
 fn=criterion2::codspeed::bencher::Bencher::iter
 54 1 0 1 1 0 1 1 0 1
-cfn=parser_napi::bench_parser_napi::{{closure}}::{{closure}}::wallclock
+cfn=wallclock_bench::bench_parser_napi::{{closure}}::{{closure}}::wallclock
 calls=1 -2 
 * <cycles-minus-one> 1 0 1 0 0 1
 
