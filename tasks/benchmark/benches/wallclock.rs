@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf, time::Duration};
 
 use oxc_benchmark::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode,
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, SamplingMode,
 };
 
 use serde::Deserialize;
@@ -42,9 +42,12 @@ fn bench_wallclock(criterion: &mut Criterion) {
     group.warm_up_time(Duration::from_micros(1));
     group.sampling_mode(SamplingMode::Flat);
     for file in files {
-        let n = black_box(0x1c2e9b89d37e0c1b);
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
-            b.iter(|| wallclock_run(n));
+            b.iter_batched(
+                || black_box(0x1c2e9b89d37e0c1b),
+                wallclock_run,
+                BatchSize::PerIteration,
+            );
         });
     }
     group.finish();
