@@ -37,15 +37,17 @@ summary: 0
 ob=/home/runner/work/oxc/oxc/target/codspeed/oxc_benchmark/wallclock-14d68eb3bec9b718
 fl=/home/runner/work/oxc/oxc/tasks/benchmark/benches/wallclock.rs
 fn=wallclock::wallclock_run
-54 1
+54 1 0 0 1 0 0 1
++1 1
++1 1 1
 
 fn=criterion2::codspeed::bencher::Bencher::iter
-47 <cycles-minus-one>
+47 2 0 1 1 0 1 1 0 1
 cfn=wallclock::wallclock_run
 calls=1 +7 
-* <cycles-minus-one>
+* 3 1 0 1 0 0 1
 
-totals: <cycles>
+totals: 5 1 1 2 0 1 2 0 1
 
 part: 3
 

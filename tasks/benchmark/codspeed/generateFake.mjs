@@ -21,6 +21,12 @@ for (const {name, ms} of results) {
         .replace('<name>', name)
         .replace('<cycles>', cycles)
         .replace(/<cycles-minus-one>/g, cycles - 1);
-    await fs.writeFile(pathJoin(dataDir, `${componentName}_${pid}.out`), content);
+    const path = pathJoin(dataDir, `${componentName}_${pid}.out`);
+    console.log('----------');
+    console.log('writing:', path);
+    console.log(content);
+    console.log('----------');
+    await fs.writeFile(path, content);
     pid++;
+    break;
 }
