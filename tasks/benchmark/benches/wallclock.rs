@@ -20,7 +20,7 @@ struct BenchResult {
 /// `parse.bench.mjs` writes the results of the benchmarks to a file `results.json`.
 /// This pseudo-benchmark reads that file and just performs meaningless calculations in a loop
 /// the number of times required to take same amount of time as the original benchmark.
-fn bench_parser_napi(criterion: &mut Criterion) {
+fn bench_wallclock(criterion: &mut Criterion) {
     let data_dir = env::var("DATA_DIR").unwrap();
     let results_path: PathBuf = [&data_dir, "results.json"].iter().collect();
     let results_file = fs::File::open(&results_path).unwrap();
@@ -44,16 +44,16 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     for file in files {
         let n = black_box(0x1c2e9b89d37e0c1b);
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
-            b.iter(|| wallclock(n));
+            b.iter(|| wallclock_run(n));
         });
     }
     group.finish();
 }
 
 #[inline(never)]
-fn wallclock(n: u64) -> u64 {
+fn wallclock_run(n: u64) -> u64 {
     n ^ 0x18bb6752b938b511
 }
 
-criterion_group!(parser, bench_parser_napi);
-criterion_main!(parser);
+criterion_group!(wallclock, bench_wallclock);
+criterion_main!(wallclock);
