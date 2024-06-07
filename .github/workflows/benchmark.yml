@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mode: [full, deserialize_only]
+        mode: [full]
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v4
@@ -120,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mode: [full, deserialize_only]
+        mode: [full]
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v4

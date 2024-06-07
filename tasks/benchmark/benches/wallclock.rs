@@ -24,11 +24,7 @@ fn bench_wallclock(criterion: &mut Criterion) {
     let data_dir = env::var("DATA_DIR").unwrap();
     let results_path: PathBuf = [&data_dir, "results.json"].iter().collect();
     let results_file = fs::File::open(&results_path).unwrap();
-    let mut files: Vec<BenchResult> = serde_json::from_reader(results_file).unwrap();
-    files.pop();
-    files.pop();
-    files.pop();
-    files.pop();
+    let files: Vec<BenchResult> = serde_json::from_reader(results_file).unwrap();
     fs::remove_file(&results_path).unwrap();
 
     let group_name = match env::var("DESERIALIZE_ONLY") {
