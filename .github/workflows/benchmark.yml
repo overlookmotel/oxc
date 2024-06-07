@@ -115,77 +115,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  benchmark-napi-instrumented:
-    name: Benchmark NAPI parser with CodSpeed instrumentation
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        mode: [full]
-    steps:
-      - name: Checkout Branch
-        uses: actions/checkout@v4
-        with:
-          show-progress: false
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Install Rust Toolchain
-        uses: ./.github/actions/rustup
-        with:
-          shared-key: benchmark_napi_ast_transfer
-          save-cache: false
-
-      - name: Install codspeed
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-codspeed
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Start bench results interceptor server
-        working-directory: ./tasks/benchmark/codspeed
-        env:
-          COMPONENT: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}_inst
-        run: |
-          corepack enable
-          pnpm install
-          node capture.mjs &
-
-      - name: Build benchmark
-        working-directory: ./napi/parser
-        run: |
-          corepack enable
-          pnpm install
-          pnpm build
-
-      - name: Run benchmark
-        uses: CodSpeedHQ/action@v2
-        timeout-minutes: 30
-        env:
-          CODSPEED: 'true'
-          DESERIALIZE_ONLY: ${{ matrix.mode == 'deserialize_only' && 'true' || '' }}
-        with:
-          run: node parse.bench.mjs
-          working-directory: ./napi/parser
-          # Dummy token for tokenless runs, to suppress logging hash of metadata JSON (see `upload.mjs`)
-          token: ${{ secrets.CODSPEED_TOKEN || 'dummy' }}
-          upload-url: http://localhost:${{ env.INTERCEPT_PORT }}/upload
-
-      - name: Upload bench data artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: parser_napi${{ matrix.mode == 'deserialize_only' && '_deser' || '' }}_inst
-          path: ${{ env.DATA_DIR }}
-          if-no-files-found: error
-          retention-days: 1
-
   upload:
     name: Upload benchmarks
-    needs: [benchmark-napi, benchmark-napi-instrumented]
+    needs: benchmark-napi
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Branch
