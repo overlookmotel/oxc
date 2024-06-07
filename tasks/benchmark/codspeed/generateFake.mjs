@@ -30,3 +30,5 @@ for (const {name, ms} of results) {
     pid++;
     break;
 }
+
+// Comment to run benches

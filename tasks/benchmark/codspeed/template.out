@@ -47,7 +47,7 @@ cfn=wallclock::wallclock_run
 calls=1 +7 
 * 3 1 0 1 0 0 1
 
-totals: 5 1 1 2 0 1 2 0 1
+totals: <cycles> 1 1 2 0 1 2 0 1
 
 part: 3
 
