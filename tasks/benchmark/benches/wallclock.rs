@@ -41,13 +41,21 @@ fn bench_wallclock(criterion: &mut Criterion) {
     group.sample_size(10);
     group.warm_up_time(Duration::from_micros(1));
     group.sampling_mode(SamplingMode::Flat);
-    let n = black_box(0x1c2e9b89d37e0c1b);
     for file in files {
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
-            b.iter(|| n ^ 0x18bb6752b938b511);
+            b.iter_batched(
+                || black_box(0x1c2e9b89d37e0c1b),
+                wallclock_run,
+                BatchSize::PerIteration,
+            );
         });
     }
     group.finish();
+}
+
+#[inline(never)]
+fn wallclock_run(n: u64) -> u64 {
+    n ^ 0x18bb6752b938b511
 }
 
 criterion_group!(wallclock, bench_wallclock);
