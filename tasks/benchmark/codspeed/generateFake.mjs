@@ -20,7 +20,7 @@ for (const {name, ms} of results) {
         .replace('<pid>', pid)
         .replace('<name>', name)
         .replace('<cycles>', cycles)
-        .replace('<cycles-minus-two>', cycles - 2);
+        .replace(/<cycles-minus-one>/g, cycles - 1);
     await fs.writeFile(pathJoin(dataDir, `${componentName}_${pid}.out`), content);
     pid++;
 }
