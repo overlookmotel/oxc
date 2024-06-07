@@ -53,7 +53,7 @@ harness = false
 
 # Only run in CI
 [[bench]]
-name    = "parser_napi"
+name    = "wallclock"
 harness = false
 bench   = false
 

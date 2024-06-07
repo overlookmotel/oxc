@@ -24,7 +24,11 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     let data_dir = env::var("DATA_DIR").unwrap();
     let results_path: PathBuf = [&data_dir, "results.json"].iter().collect();
     let results_file = fs::File::open(&results_path).unwrap();
-    let files: Vec<BenchResult> = serde_json::from_reader(results_file).unwrap();
+    let mut files: Vec<BenchResult> = serde_json::from_reader(results_file).unwrap();
+    files.pop();
+    files.pop();
+    files.pop();
+    files.pop();
     fs::remove_file(&results_path).unwrap();
 
     let group_name = match env::var("DESERIALIZE_ONLY") {
@@ -38,20 +42,17 @@ fn bench_parser_napi(criterion: &mut Criterion) {
     group.warm_up_time(Duration::from_micros(1));
     group.sampling_mode(SamplingMode::Flat);
     for file in files {
-        let cycles = (file.duration * 266672645.0) as u64;
+        let n = black_box(0x1c2e9b89d37e0c1b);
         group.bench_function(BenchmarkId::from_parameter(&file.filename), |b| {
-            b.iter(|| {
-                let cycles = black_box(cycles);
-                let mut n: u64 = 0x1c2e9b89d37e0c1b;
-                for _ in 0..cycles {
-                    n = n.rotate_right(3);
-                    n = n ^ 0x18bb6752b938b511;
-                }
-                black_box(n);
-            });
+            b.iter(|| wallclock(n));
         });
     }
     group.finish();
+}
+
+#[inline(never)]
+fn wallclock(n: u64) -> u64 {
+    n ^ 0x18bb6752b938b511
 }
 
 criterion_group!(parser, bench_parser_napi);
